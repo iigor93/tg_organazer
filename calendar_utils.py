@@ -1,0 +1,62 @@
+from calendar import monthrange
+from datetime import date
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+
+def generate_calendar(year: int | None = None, month: int | None = None) -> InlineKeyboardMarkup:
+    today = date.today()
+
+    year = year or today.year
+    month = month or today.month
+
+    first_weekday, num_days = monthrange(year, month)
+
+    month_names = ["", "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"]
+    header = f"{month_names[month]} {year}"
+
+    keyboard = []
+
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    next_month = month + 1 if month < 12 else 1
+    next_year = year if month < 12 else year + 1
+
+    nav_buttons = [
+        InlineKeyboardButton("◀", callback_data=f"calendar_nav_{prev_year}_{prev_month}"),
+        InlineKeyboardButton(header, callback_data="ignore"),
+        InlineKeyboardButton("▶", callback_data=f"calendar_nav_{next_year}_{next_month}"),
+    ]
+    keyboard.append(nav_buttons)
+
+    weekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    keyboard.append([InlineKeyboardButton(day, callback_data="ignore") for day in weekdays])
+
+    week = []
+
+    for _ in range(first_weekday):
+        week.append(InlineKeyboardButton(" ", callback_data="ignore"))
+
+    for day in range(1, num_days + 1):
+        # show_day = f"{day}²" if day == today.day else day  # todo тут будем добавлять кол-во задач на сегодня
+        show_day = day
+        week.append(InlineKeyboardButton(str(show_day), callback_data=f"calendar_select_{year}_{month}_{day}"))
+
+        if len(week) == 7:
+            keyboard.append(week)
+            week = []
+
+    if week:
+        for _ in range(7 - len(week)):
+            week.append(InlineKeyboardButton(" ", callback_data="ignore"))
+        keyboard.append(week)
+
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                f"Сегодня {today.day}.{today.month}.{today.year}", callback_data=f"calendar_select_{today.year}_{today.month}_{today.day}"
+            )
+        ]
+    )
+
+    return InlineKeyboardMarkup(keyboard)
