@@ -1,12 +1,12 @@
 import logging
 import os
-from datetime import date
+from datetime import date, time
 
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ApplicationBuilder, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
-from calendar_utils import generate_calendar
+from datetime_selector import generate_calendar, generate_time_selector
 from models import Event, User
 
 load_dotenv(".env")
@@ -97,6 +97,51 @@ async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
 
 
+async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработка нажатий на кнопки выбора времени"""
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    print("DATA TIME: ", data)
+
+    if data.startswith("time_hour_up_"):
+        _, _, _, hours_str, minutes_str = data.split("_")
+        hours = (int(hours_str) + 1) % 24
+        minutes = int(minutes_str)
+
+    elif data.startswith("time_hour_down_"):
+        _, _, _, hours_str, minutes_str = data.split("_")
+        hours = (int(hours_str) - 1) % 24
+        minutes = int(minutes_str)
+
+    elif data.startswith("time_minute_up_"):
+        _, _, _, hours_str, minutes_str = data.split("_")
+        hours = int(hours_str)
+        minutes = (int(minutes_str) + 10) % 60
+
+    elif data.startswith("time_minute_down_"):
+        _, _, _, hours_str, minutes_str = data.split("_")
+        hours = int(hours_str)
+        minutes = (int(minutes_str) - 10) % 60
+
+    elif data.startswith("time_confirm_"):
+        _, _, hours_str, minutes_str = data.split("_")
+        hours = int(hours_str)
+        minutes = int(minutes_str)
+
+        selected_time = time(hours, minutes)
+        await query.message.reply_text(f"⏰ Вы выбрали время: {selected_time.strftime('%H:%M')}")
+        return
+
+    elif data == "time_ignore":
+        return
+
+    # Обновляем клавиатуру с новым временем
+    reply_markup = generate_time_selector(hours, minutes)
+    await query.edit_message_reply_markup(reply_markup=reply_markup)
+
+
 async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
@@ -136,7 +181,9 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
         _, _, year_str, month_str, day_str = data.split("_")
         local_user.events.append(Event(title="Событие", event_datetime=f"{day_str}.{month_str}.{year_str}", recurrent="no"))
 
-        await query.message.reply_text(text="Отлично, событие добавлено")
+        reply_markup = generate_time_selector()
+
+        await query.message.reply_text(text="Укажите время начала события", reply_markup=reply_markup)
 
     elif data == "ignore":
         pass
@@ -153,6 +200,7 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.Regex("^⏭ Пропустить$"), handle_skip))
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    application.add_handler(CallbackQueryHandler(handle_time_callback, pattern="^time_"))
     application.add_handler(CallbackQueryHandler(handle_calendar_callback))
 
     logger.info("Бот запущен...")

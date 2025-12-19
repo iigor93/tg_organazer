@@ -60,3 +60,27 @@ def generate_calendar(year: int | None = None, month: int | None = None) -> Inli
     )
 
     return InlineKeyboardMarkup(keyboard)
+
+
+def generate_time_selector(hours: int = 12, minutes: int = 0) -> InlineKeyboardMarkup:
+    hours = hours % 24
+    minutes = (minutes // 10) * 10  # Округляем до шага 10 минут
+    minutes = minutes % 60
+
+    keyboard = [
+        [
+            InlineKeyboardButton("⬆️", callback_data=f"time_hour_up_{hours}_{minutes}"),
+            InlineKeyboardButton("⬆️", callback_data=f"time_minute_up_{hours}_{minutes}"),
+        ],
+        [
+            InlineKeyboardButton(f"{hours:02d}", callback_data="time_ignore"),
+            InlineKeyboardButton(f"{minutes:02d}", callback_data="time_ignore"),
+        ],
+        [
+            InlineKeyboardButton("⬇️", callback_data=f"time_hour_down_{hours}_{minutes}"),
+            InlineKeyboardButton("⬇️", callback_data=f"time_minute_down_{hours}_{minutes}"),
+        ],
+        [InlineKeyboardButton("✅ OK", callback_data=f"time_confirm_{hours}_{minutes}")],
+    ]
+
+    return InlineKeyboardMarkup(keyboard)
