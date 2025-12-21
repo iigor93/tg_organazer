@@ -228,6 +228,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             f"\nВремя начала: <b>{event.start_time if event.start_time else '...'}</b>"
             f"\nВремя окончания: <b>{event.stop_time if event.stop_time else '...'}</b>"
             f"\nОписание: <b>{event.title if event.title else '...'}</b>"
+            f"\nПовтор: <b>{event.recurrent.get_name() if event.recurrent else '...'}</b>"
             f"\nУчастники: <b>...</b>"
         )
         await query.edit_message_text(text=text, parse_mode="HTML")
