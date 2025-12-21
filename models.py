@@ -1,11 +1,45 @@
+import datetime
+import enum
 from dataclasses import dataclass, field
+
+
+class Recurrent(enum.StrEnum):
+    never = "never"
+    daily = "daily"
+    weekly = "weekly"
+    annual = "annual"
+
+    def get_name(self) -> str:
+        if self.value == "never":
+            return "Никогда"
+        elif self.value == "daily":
+            return "Ежедневно"
+        elif self.value == "weekly":
+            return "Еженедельно"
+        else:
+            return "Каждый год"
+
+    @staticmethod
+    def get_all_names() -> list[tuple]:
+        return [
+            ("Никогда", Recurrent.never),
+            ("Ежедневно", Recurrent.daily),
+            ("Еженедельно", Recurrent.weekly),
+            ("Каждый год", Recurrent.annual),
+        ]
 
 
 @dataclass
 class Event:
-    title: str
-    event_datetime: str
-    recurrent: str
+    event_date: datetime.date
+    title: str | None = None
+    start_time: str | None = None
+    stop_time: str | None = None
+    recurrent: Recurrent = Recurrent.never
+    participants: list | None = None
+
+    def get_date(self) -> tuple[int, int, int]:
+        return self.event_date.year, self.event_date.month, self.event_date.day
 
 
 @dataclass
@@ -16,7 +50,7 @@ class User:
 
     def get_events(self) -> str:
         if self.events:
-            _events = "\n".join([f"{event.event_datetime}: {event.title}" for event in self.events])
+            _events = "\n".join([f"{event.start_time}: {event.title}" for event in self.events])
         else:
             _events = "Событий не найдено. Давай заведем событие"
 

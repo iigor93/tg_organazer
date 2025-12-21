@@ -1,0 +1,262 @@
+import datetime
+from datetime import time
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
+
+from config import MONTH_NAMES, logger
+from models import Event, Recurrent
+
+
+def generate_time_selector(hours: int = 12, minutes: int = 0, time_type: str = "") -> InlineKeyboardMarkup:
+    hours = hours % 24
+    minutes = (minutes // 10) * 10  # Округляем до шага 10 минут
+    minutes = minutes % 60
+
+    keyboard = [
+        [
+            InlineKeyboardButton("▲", callback_data=f"time_hour_up_{time_type}_{hours}_{minutes}"),
+            InlineKeyboardButton("▲", callback_data=f"time_minute_up_{time_type}_{hours}_{minutes}"),
+        ],
+        [
+            InlineKeyboardButton(f"{hours:02d}", callback_data="time_ignore"),
+            InlineKeyboardButton(f"{minutes:02d}", callback_data="time_ignore"),
+        ],
+        [
+            InlineKeyboardButton("▼️", callback_data=f"time_hour_down_{time_type}_{hours}_{minutes}"),
+            InlineKeyboardButton("▼️", callback_data=f"time_minute_down_{time_type}_{hours}_{minutes}"),
+        ],
+        # [InlineKeyboardButton("✅ OK", callback_data=f"time_confirm_{time_type}_{hours}_{minutes}")],
+        [InlineKeyboardButton("✅ OK", callback_data="create_event_begin_")],
+    ]
+
+    return InlineKeyboardMarkup(keyboard)
+
+
+async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("handle_time_callback")
+
+    query = update.callback_query
+    await query.answer()
+
+    event: Event | None = context.user_data.get("event")
+
+    data = query.data
+
+    if data.startswith("time_hour_up_"):
+        _, _, _, _, hours_str, minutes_str = data.split("_")
+        hours = (int(hours_str) + 1) % 24
+        minutes = int(minutes_str)
+
+    elif data.startswith("time_hour_down_"):
+        _, _, _, _, hours_str, minutes_str = data.split("_")
+        hours = (int(hours_str) - 1) % 24
+        minutes = int(minutes_str)
+
+    elif data.startswith("time_minute_up_"):
+        _, _, _, _, hours_str, minutes_str = data.split("_")
+        hours = int(hours_str)
+        minutes = (int(minutes_str) + 10) % 60
+
+    elif data.startswith("time_minute_down_"):
+        _, _, _, _, hours_str, minutes_str = data.split("_")
+        hours = int(hours_str)
+        minutes = (int(minutes_str) - 10) % 60
+
+    # elif data.startswith("time_confirm_"):
+    #     _, _, _, hours_str, minutes_str = data.split("_")
+    #     hours = int(hours_str)
+    #     minutes = int(minutes_str)
+
+    selected_time = time(hours, minutes).strftime("%H:%M")
+
+    time_type = ""
+    if event:
+        if "start" in data:
+            event.start_time = selected_time
+            time_type = "start"
+        elif "stop" in data:
+            event.stop_time = selected_time
+            time_type = "stop"
+
+        context.user_data["event"] = event
+
+    logger.info(f"*** time picker: {event}")
+
+    # Обновляем клавиатуру с новым временем
+    reply_markup = generate_time_selector(hours=hours, minutes=minutes, time_type=time_type)
+
+    await query.edit_message_reply_markup(reply_markup=reply_markup)
+
+
+def get_event_constructor(event: Event, year: int, month: int, day: int):
+    start_time = "Начало *"
+    stop_time = "Окончание"
+    title = "Описание *"
+    recurrent = "Повтор"
+    participants = "Участники"
+    show_create_btn = False
+
+    if event:
+        start_time = event.start_time if event.start_time else start_time
+        stop_time = event.stop_time if event.stop_time else stop_time
+        title = event.title if event.title else title
+        recurrent = event.recurrent.get_name()
+        len_participants = len(event.recurrent) if event.participants else None
+        if len_participants:
+            participants += f" ({len_participants})"
+
+        if event.start_time and event.title:
+            show_create_btn = True
+
+    formatted_date = f"{day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года"
+    text = f"Создать событие на *{formatted_date}* \n\n\\* \\- поля обязательные для заполнения"
+
+    start_btn = InlineKeyboardButton(text=start_time, callback_data=f"create_event_start_{year}_{month}_{day}")
+    stop_btn = InlineKeyboardButton(text=stop_time, callback_data=f"create_event_stop_{year}_{month}_{day}")
+    description_btn = InlineKeyboardButton(text=title, callback_data=f"create_event_description_{year}_{month}_{day}")
+    recurrent_btn = InlineKeyboardButton(text=recurrent, callback_data=f"create_event_recurrent_{year}_{month}_{day}")
+    participants_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_participants_{year}_{month}_{day}")
+    buttons = [[start_btn, stop_btn], [description_btn], [recurrent_btn], [participants_btn]]
+    if show_create_btn:
+        create_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_save_{year}_{month}_{day}")
+        buttons.append([create_btn])
+
+    reply_markup = InlineKeyboardMarkup(buttons)
+
+    return text, reply_markup
+
+
+async def handle_create_event_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("handle_create_event_callback")
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    event: Event | None = context.user_data.get("event")
+    if not event:
+        event = Event(event_date=datetime.datetime.now().date())
+        context.user_data["event"] = event
+
+    year, month, day = event.get_date()
+
+    logger.info(f"* EVENT: {event}")
+
+    if data.startswith("create_event_begin_"):
+        try:
+            _, _, _, year, month, day = data.split("_")
+            event = Event(event_date=datetime.datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d"))
+            context.user_data["event"] = event
+        except:  # noqa
+            ...
+
+        # start_time = "Начало *"
+        # stop_time = "Окончание"
+        # title = "Описание *"
+        # recurrent = "Повтор"
+        # participants = "Участники"
+        # show_create_btn = False
+        #
+        # if event:
+        #     start_time = event.start_time if event.start_time else start_time
+        #     stop_time = event.stop_time if event.stop_time else stop_time
+        #     title = event.title if event.title else title
+        #     recurrent = event.recurrent.get_name()
+        #     len_participants = len(event.recurrent) if event.participants else None
+        #     if len_participants:
+        #         participants += f" ({len_participants})"
+        #
+        #     if event.start_time and event.title:
+        #         show_create_btn = True
+        #
+        # formatted_date = f"{day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года"
+        # text = f"Создать событие на *{formatted_date}* \n\n\\* \\- поля обязательные для заполнения"
+        #
+        # start_btn = InlineKeyboardButton(text=start_time, callback_data=f"create_event_start_{year}_{month}_{day}")
+        # stop_btn = InlineKeyboardButton(text=stop_time, callback_data=f"create_event_stop_{year}_{month}_{day}")
+        # description_btn = InlineKeyboardButton(text=title, callback_data=f"create_event_description_{year}_{month}_{day}")
+        # recurrent_btn = InlineKeyboardButton(text=recurrent, callback_data=f"create_event_recurrent_{year}_{month}_{day}")
+        # participants_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_participants_{year}_{month}_{day}")
+        # buttons = [
+        #     [start_btn, stop_btn], [description_btn], [recurrent_btn], [participants_btn]
+        # ]
+        # if show_create_btn:
+        #     create_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_save_{year}_{month}_{day}")
+        #     buttons.append([create_btn])
+        #
+        # reply_markup = InlineKeyboardMarkup(buttons)
+
+        text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+
+    elif data.startswith("create_event_start_"):
+        hours = 12
+        minutes = 0
+        if event and event.start_time:
+            hours, minutes = event.start_time.split(":")
+
+        reply_markup = generate_time_selector(hours=int(hours), minutes=int(minutes), time_type="start")
+
+        await query.edit_message_text(text="Укажите время начала события", reply_markup=reply_markup)
+
+    elif data.startswith("create_event_stop_"):
+        text = "Укажите время окончания события"
+        hours = 12
+        minutes = 0
+        if event and event.stop_time:
+            hours, minutes = event.stop_time.split(":")
+
+        if event.start_time:
+            hours, minutes = event.start_time.split(":")
+            hours = int(hours)
+            minutes = int(minutes)
+
+            text += f"\n\n (уже задано время начала события {hours}:{minutes})"
+
+        reply_markup = generate_time_selector(hours=int(hours), minutes=int(minutes), time_type="stop")
+        await query.edit_message_text(text=text, reply_markup=reply_markup)
+
+    elif data.startswith("create_event_description_"):
+        # awaiting_event_description[update.effective_user.id] = True  # todo тут в context будем писать
+        await query.edit_message_text(text="Опиши, что будет в событии")
+
+    elif data.startswith("create_event_save_recurrent_"):
+        _, _, _, _, recurrent = data.split("_")
+        event.recurrent = Recurrent(recurrent)
+        context.user_data["event"] = event
+
+        text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+
+    elif data.startswith("create_event_recurrent_"):
+        list_btn = []
+        for item in Recurrent.get_all_names():
+            list_btn.append([InlineKeyboardButton(item[0], callback_data=f"create_event_save_recurrent_{item[1]}")])
+        # never_btn = InlineKeyboardButton("Никогда", callback_data=f"create_event_begin_{year}_{month}_{day}")
+        # daily_btn = InlineKeyboardButton("Ежедневно", callback_data=f"create_event_begin_{year}_{month}_{day}")
+        # weekly_btn = InlineKeyboardButton("Каждую неделю", callback_data=f"create_event_begin_{year}_{month}_{day}")
+        # annual_btn = InlineKeyboardButton("Каждый год", callback_data=f"create_event_begin_{year}_{month}_{day}")
+
+        reply_markup = InlineKeyboardMarkup(list_btn)
+        await query.edit_message_text(text="Как часто повторять событие:", reply_markup=reply_markup)
+
+    elif data.startswith("create_event_participants_"):
+        ...
+        # questions = ["Вася", "Петя", "Маша"]
+        # Send the poll and store the message object to reference its poll ID
+
+        # await query.edit_message_text(text="Укажите время окончания события", reply_markup=reply_markup)
+
+
+async def show_upcoming_events(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("show_upcoming_events")
+
+    await update.message.reply_text("Функция 'Ближайшие события' в разработке 🚧")
+
+
+async def handle_delete_event_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("handle_delete_event_callback")
+    query = update.callback_query
+    await query.answer()
+
+    await query.message.reply_text("Функция 'Удаление события' в разработке 🚧")
