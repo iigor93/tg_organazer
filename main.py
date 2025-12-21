@@ -13,9 +13,14 @@ from telegram.ext import (
 
 from config import logger
 from handlers.cal import handle_calendar_callback, show_calendar
-from handlers.events import handle_create_event_callback, handle_delete_event_callback, handle_time_callback, show_upcoming_events
+from handlers.events import (
+    get_event_constructor,
+    handle_create_event_callback,
+    handle_delete_event_callback,
+    handle_time_callback,
+    show_upcoming_events,
+)
 from handlers.start import handle_location, handle_skip, start
-from models import User
 
 load_dotenv(".env")
 
@@ -23,45 +28,26 @@ load_dotenv(".env")
 TOKEN = os.getenv("TG_BOT_TOKEN")
 
 
-user_state = {717923644: User(telegram_id=717923644)}
-awaiting_event_description = {}
+async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("handle_text")
+    logger.info(update)
 
-#
-# async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-#     logger.info("handle_text")
-#
-#     text = update.message.text
-#
-#     await_description = awaiting_event_description.get(update.effective_user.id)
-#
-#     if await_description:
-#         awaiting_event_description.pop(update.effective_user.id)
-#         day = 23
-#         month = 12
-#         year = 2025
-#         formatted_date = f"{day} {MONTH_NAMES[int(month) - 1]} {year} года"
-#         text = f"Создать событие на {formatted_date}"
-#
-#         start_btn = InlineKeyboardButton("Начало", callback_data=f"create_event_start_{year}_{month}_{day}")
-#         stop_btn = InlineKeyboardButton("Окончание", callback_data=f"create_event_stop_{year}_{month}_{day}")
-#         description_btn = InlineKeyboardButton("Описание", callback_data=f"create_event_description_{year}_{month}_{day}")
-#         recurrent_btn = InlineKeyboardButton("Повтор", callback_data=f"create_event_recurrent_{year}_{month}_{day}")
-#         participants_btn = InlineKeyboardButton("Участники", callback_data=f"create_event_participants_{year}_{month}_{day}")
-#
-#         reply_markup = InlineKeyboardMarkup([[start_btn, stop_btn], [description_btn], [recurrent_btn], [participants_btn]])
-#
-#         await update.message.reply_text(
-#             text,
-#             reply_markup=reply_markup,
-#             parse_mode="MarkdownV2",
-#         )
-#
-#     elif text == "📅 Показать календарь":
-#         await show_calendar(update, context)
-#     elif text == "🗓 Ближайшие события":
-#         await show_upcoming_events(update, context)
-#     else:
-#         await update.message.reply_text("Используйте кнопки для навигации.")
+    if context.user_data.get("await_event_description"):
+        event = context.user_data.get("event")
+        event.title = update.message.text
+        context.user_data["event"] = event
+
+        # await update.message.reply_text(
+        #     text=f"Добавлено описание к событию *{event.get_format_date()}*:\n\n{event.title}",
+        #     parse_mode="MarkdownV2"
+        # )
+        title_add = f"Добавлено описание к событию *{event.get_format_date()}*:\n\n{event.title}"
+        text, reply_markup = get_event_constructor(event=event)
+        text = title_add + "\n" + text
+        await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+        # получаем кнопки
+        return
+    await update.message.reply_text("Используйте кнопки для навигации.")
 
 
 async def all_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -89,7 +75,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_delete_event_callback, pattern="^delete_event_"))
     application.add_handler(MessageHandler(filters.Regex("^🗓 Ближайшие события$"), show_upcoming_events))
 
-    # application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     application.add_handler(CallbackQueryHandler(all_callbacks))
 

@@ -2,6 +2,8 @@ import datetime
 import enum
 from dataclasses import dataclass, field
 
+from config import MONTH_NAMES
+
 
 class Recurrent(enum.StrEnum):
     never = "never"
@@ -21,12 +23,7 @@ class Recurrent(enum.StrEnum):
 
     @staticmethod
     def get_all_names() -> list[tuple]:
-        return [
-            ("Никогда", Recurrent.never),
-            ("Ежедневно", Recurrent.daily),
-            ("Еженедельно", Recurrent.weekly),
-            ("Каждый год", Recurrent.annual),
-        ]
+        return [(item.get_name(), item.value) for item in Recurrent]
 
 
 @dataclass
@@ -40,6 +37,9 @@ class Event:
 
     def get_date(self) -> tuple[int, int, int]:
         return self.event_date.year, self.event_date.month, self.event_date.day
+
+    def get_format_date(self) -> str:
+        return f"{self.event_date.day} {(MONTH_NAMES[int(self.event_date.month) - 1]).title()} {self.event_date.year} года"
 
 
 @dataclass
