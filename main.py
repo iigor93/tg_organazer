@@ -17,6 +17,7 @@ from handlers.events import (
     get_event_constructor,
     handle_create_event_callback,
     handle_delete_event_callback,
+    handle_participants_callback,
     handle_time_callback,
     show_upcoming_events,
 )
@@ -46,6 +47,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         text = title_add + "\n" + text
         await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
         # получаем кнопки
+        context.user_data.pop("await_event_description")
         return
     await update.message.reply_text("Используйте кнопки для навигации.")
 
@@ -73,6 +75,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_time_callback, pattern="^time_"))
     application.add_handler(CallbackQueryHandler(handle_create_event_callback, pattern="^create_event_"))
     application.add_handler(CallbackQueryHandler(handle_delete_event_callback, pattern="^delete_event_"))
+    application.add_handler(CallbackQueryHandler(handle_participants_callback, pattern="^participants_"))
     application.add_handler(MessageHandler(filters.Regex("^🗓 Ближайшие события$"), show_upcoming_events))
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))

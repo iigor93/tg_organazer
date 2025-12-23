@@ -33,7 +33,7 @@ class Event:
     start_time: str | None = None
     stop_time: str | None = None
     recurrent: Recurrent = Recurrent.never
-    participants: list | None = None
+    participants: list[int | None] = field(default_factory=lambda: [])
 
     def get_date(self) -> tuple[int, int, int]:
         return self.event_date.year, self.event_date.month, self.event_date.day

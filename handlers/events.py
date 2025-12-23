@@ -33,6 +33,38 @@ def generate_time_selector(hours: int = 12, minutes: int = 0, time_type: str = "
     return InlineKeyboardMarkup(keyboard)
 
 
+async def handle_participants_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("handle_participants_callback")
+
+    query = update.callback_query
+    await query.answer()
+
+    event: Event | None = context.user_data.get("event")
+
+    tg_id_income = int(query.data.split("_")[1])
+
+    if tg_id_income in event.participants:
+        event.participants.remove(tg_id_income)
+    else:
+        event.participants.append(tg_id_income)
+
+    context.user_data["event"] = event
+
+    participants = {1: "Вася", 2: "Петя", 3: "Маша"}  # todo брать из юзера
+    list_btn = []
+    for tg_id, name in participants.items():
+        if tg_id in event.participants:
+            name = f"{name} ✅"
+        else:
+            name = name
+        list_btn.append([InlineKeyboardButton(name, callback_data=f"participants_{tg_id}")])
+
+    list_btn.append([InlineKeyboardButton("✅ OK", callback_data="create_event_begin_")])
+
+    reply_markup = InlineKeyboardMarkup(list_btn)
+    await query.edit_message_text(text="Добавь пользователей к событию", reply_markup=reply_markup)
+
+
 async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("handle_time_callback")
 
@@ -108,7 +140,7 @@ def get_event_constructor(event: Event, year: int | None = None, month: int | No
         title = event.title if event.title else title
         title = title[:20] + "..." if len(str(title)) > 20 else title
         recurrent = f"{recurrent}: {event.recurrent.get_name()}"
-        len_participants = len(event.recurrent) if event.participants else None
+        len_participants = len(event.participants) if event.participants else None
         if len_participants:
             participants += f" ({len_participants})"
 
@@ -124,6 +156,10 @@ def get_event_constructor(event: Event, year: int | None = None, month: int | No
     recurrent_btn = InlineKeyboardButton(text=recurrent, callback_data=f"create_event_recurrent_{year}_{month}_{day}")
     participants_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_participants_{year}_{month}_{day}")
     buttons = [[start_btn, stop_btn], [description_btn], [recurrent_btn], [participants_btn]]
+
+    # if user.participants:  # todo тут будем проверять есть ли у юзера вообще связные люди
+    #     buttons.append([participants_btn])
+
     if show_create_btn:
         create_btn = InlineKeyboardButton(text="💾 Сохранить событие", callback_data="create_event_save_to_db")
         buttons.append([create_btn])
@@ -216,12 +252,19 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text="Как часто повторять событие:", reply_markup=reply_markup)
 
     elif data.startswith("create_event_participants_"):
-        ...
-        # questions = ["Вася", "Петя", "Маша"]
-        # Send the poll and store the message object to reference its poll ID
+        participants = {1: "Вася", 2: "Петя", 3: "Маша"}  # todo брать из юзера
+        list_btn = []
+        for tg_id, name in participants.items():
+            if tg_id in event.participants:
+                name = f"{name} ✅"
+            list_btn.append([InlineKeyboardButton(name, callback_data=f"participants_{tg_id}")])
 
-        # await query.edit_message_text(text="Укажите время окончания события", reply_markup=reply_markup)
+        list_btn.append([InlineKeyboardButton("✅ OK", callback_data="create_event_begin_")])
+
+        reply_markup = InlineKeyboardMarkup(list_btn)
+        await query.edit_message_text(text="Добавь пользователей к событию", reply_markup=reply_markup)
     elif data.startswith("create_event_save_to_db"):
+        participants = ",".join(str(item) for item in event.participants) if event.participants else "..."
         text = (
             "<b>Событие успешно сохранено!</b>"
             f"\n\nДата: <b>{event.get_format_date()}</b>"
@@ -229,8 +272,9 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             f"\nВремя окончания: <b>{event.stop_time if event.stop_time else '...'}</b>"
             f"\nОписание: <b>{event.title if event.title else '...'}</b>"
             f"\nПовтор: <b>{event.recurrent.get_name() if event.recurrent else '...'}</b>"
-            f"\nУчастники: <b>...</b>"
+            f"\nУчастники: <b>{participants}</b>"
         )
+        context.user_data.pop("event")
         await query.edit_message_text(text=text, parse_mode="HTML")
 
 
