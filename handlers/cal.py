@@ -1,10 +1,13 @@
+import logging
 from calendar import monthrange
 from datetime import date
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from config import MONTH_NAMES, logger
+from config import MONTH_NAMES
+
+logger = logging.getLogger(__name__)
 
 
 def generate_calendar(year: int | None = None, month: int | None = None) -> InlineKeyboardMarkup:

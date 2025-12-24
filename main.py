@@ -1,3 +1,4 @@
+import logging
 import os
 
 from dotenv import load_dotenv
@@ -11,7 +12,6 @@ from telegram.ext import (
     filters,
 )
 
-from config import logger
 from handlers.cal import handle_calendar_callback, show_calendar
 from handlers.events import (
     get_event_constructor,
@@ -24,6 +24,9 @@ from handlers.events import (
 from handlers.start import handle_location, handle_skip, start
 
 load_dotenv(".env")
+
+
+logger = logging.getLogger(__name__)
 
 
 TOKEN = os.getenv("TG_BOT_TOKEN")

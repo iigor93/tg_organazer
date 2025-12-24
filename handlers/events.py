@@ -1,11 +1,14 @@
 import datetime
+import logging
 from datetime import time
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from config import MONTH_NAMES, logger
+from config import MONTH_NAMES
 from models import Event, Recurrent
+
+logger = logging.getLogger(__name__)
 
 
 def generate_time_selector(hours: int = 12, minutes: int = 0, time_type: str = "") -> InlineKeyboardMarkup:

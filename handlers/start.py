@@ -1,7 +1,9 @@
+import logging
+
 from telegram import KeyboardButton, Message, ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from config import logger
+logger = logging.getLogger(__name__)
 
 # from models import User
 
