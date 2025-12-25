@@ -1,0 +1,20 @@
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, func, true
+
+from database.session import Base
+
+
+class User(Base):
+    __tablename__ = "tg_users"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    tg_id = Column(Integer, index=True, nullable=False, unique=True)
+    is_active = Column(Boolean, server_default=true(), comment="Признак, писал ли пользователь боту")
+
+    username = Column(String(), nullable=True)
+    first_name = Column(String(), nullable=True)
+    last_name = Column(String(), nullable=True)
+    time_zone = Column(String(50), nullable=True)
+    language_code = Column(String(5), nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

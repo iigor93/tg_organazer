@@ -1,6 +1,7 @@
 import datetime
 import enum
-from dataclasses import dataclass, field
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from config import MONTH_NAMES
 
@@ -9,6 +10,7 @@ class Recurrent(enum.StrEnum):
     never = "never"
     daily = "daily"
     weekly = "weekly"
+    monthly = "monthly"
     annual = "annual"
 
     def get_name(self) -> str:
@@ -18,6 +20,8 @@ class Recurrent(enum.StrEnum):
             return "Ежедневно"
         elif self.value == "weekly":
             return "Еженедельно"
+        elif self.value == "monthly":
+            return "Ежемесячно"
         else:
             return "Каждый год"
 
@@ -26,14 +30,16 @@ class Recurrent(enum.StrEnum):
         return [(item.get_name(), item.value) for item in Recurrent]
 
 
-@dataclass
-class Event:
+class Event(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     event_date: datetime.date
-    title: str | None = None
-    start_time: str | None = None
-    stop_time: str | None = None
+    description: str | None = None
+    start_time: datetime.time | None = None
+    stop_time: datetime.time | None = None
     recurrent: Recurrent = Recurrent.never
-    participants: list[int | None] = field(default_factory=lambda: [])
+    participants: list[int | None] = Field(default_factory=list)
+    tg_id: int
 
     def get_date(self) -> tuple[int, int, int]:
         return self.event_date.year, self.event_date.month, self.event_date.day
@@ -42,16 +48,12 @@ class Event:
         return f"{self.event_date.day} {(MONTH_NAMES[int(self.event_date.month) - 1]).title()} {self.event_date.year} года"
 
 
-@dataclass
-class User:
-    telegram_id: str | int
-    geo_location: str | None = None
-    events: list[Event | None] = field(default_factory=lambda: [])
+class TgUser(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
-    def get_events(self) -> str:
-        if self.events:
-            _events = "\n".join([f"{event.start_time}: {event.title}" for event in self.events])
-        else:
-            _events = "Событий не найдено. Давай заведем событие"
-
-        return _events
+    tg_id: int = Field(int, alias="id")
+    is_active: bool = True
+    username: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    language_code: str | None = None

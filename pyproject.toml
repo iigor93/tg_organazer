@@ -4,10 +4,14 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.12"
 dependencies = [
+    "aiosqlite>=0.22.1",
+    "alembic>=1.17.2",
     "pre-commit>=4.5.1",
+    "pydantic>=2.12.5",
     "python-dotenv>=1.2.1",
     "python-telegram-bot>=22.5",
     "ruff>=0.14.10",
+    "sqlalchemy>=2.0.45",
 ]
 
 [tool.ruff]

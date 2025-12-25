@@ -6,7 +6,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from config import MONTH_NAMES
-from models import Event, Recurrent
+from database.db_controller import db_controller
+from entities import Event, Recurrent
 
 logger = logging.getLogger(__name__)
 
@@ -100,13 +101,7 @@ async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         hours = int(hours_str)
         minutes = (int(minutes_str) - 10) % 60
 
-    # elif data.startswith("time_confirm_"):
-    #     _, _, _, hours_str, minutes_str = data.split("_")
-    #     hours = int(hours_str)
-    #     minutes = int(minutes_str)
-
-    selected_time = time(hours, minutes).strftime("%H:%M")
-
+    selected_time = time(hours, minutes)
     time_type = ""
     if event:
         if "start" in data:
@@ -129,7 +124,7 @@ async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 def get_event_constructor(event: Event, year: int | None = None, month: int | None = None, day: int | None = None):
     start_time = "Начало *"
     stop_time = "Окончание"
-    title = "Описание *"
+    description = "Описание *"
     recurrent = "Повтор"
     participants = "Участники"
     show_create_btn = False
@@ -138,16 +133,16 @@ def get_event_constructor(event: Event, year: int | None = None, month: int | No
         if not year:
             year, month, day = event.get_date()
 
-        start_time = event.start_time if event.start_time else start_time
-        stop_time = event.stop_time if event.stop_time else stop_time
-        title = event.title if event.title else title
-        title = title[:20] + "..." if len(str(title)) > 20 else title
+        start_time = event.start_time.strftime("%H:%M") if event.start_time else start_time
+        stop_time = event.stop_time.strftime("%H:%M") if event.stop_time else stop_time
+        description = event.description if event.description else description
+        description = description[:20] + "..." if len(str(description)) > 20 else description
         recurrent = f"{recurrent}: {event.recurrent.get_name()}"
         len_participants = len(event.participants) if event.participants else None
         if len_participants:
             participants += f" ({len_participants})"
 
-        if event.start_time and event.title:
+        if event.start_time and event.description:
             show_create_btn = True
 
     formatted_date = f"{day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года"
@@ -155,7 +150,7 @@ def get_event_constructor(event: Event, year: int | None = None, month: int | No
 
     start_btn = InlineKeyboardButton(text=start_time, callback_data=f"create_event_start_{year}_{month}_{day}")
     stop_btn = InlineKeyboardButton(text=stop_time, callback_data=f"create_event_stop_{year}_{month}_{day}")
-    description_btn = InlineKeyboardButton(text=title, callback_data=f"create_event_description_{year}_{month}_{day}")
+    description_btn = InlineKeyboardButton(text=description, callback_data=f"create_event_description_{year}_{month}_{day}")
     recurrent_btn = InlineKeyboardButton(text=recurrent, callback_data=f"create_event_recurrent_{year}_{month}_{day}")
     participants_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_participants_{year}_{month}_{day}")
     buttons = [[start_btn, stop_btn], [description_btn], [recurrent_btn], [participants_btn]]
@@ -180,7 +175,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
     event: Event | None = context.user_data.get("event")
     if not event:
-        event = Event(event_date=datetime.datetime.now().date())
+        event = Event(event_date=datetime.datetime.now().date(), tg_id=update.effective_user.id)
         context.user_data["event"] = event
 
     year, month, day = event.get_date()
@@ -190,7 +185,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
     if data.startswith("create_event_begin_"):
         try:
             _, _, _, year, month, day = data.split("_")
-            event = Event(event_date=datetime.datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d"))
+            event = Event(event_date=datetime.datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d"), tg_id=update.effective_user.id)
             context.user_data["event"] = event
         except:  # noqa
             ...
@@ -202,9 +197,10 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         hours = 12
         minutes = 0
         if event and event.start_time:
-            hours, minutes = event.start_time.split(":")
+            hours = event.start_time.hour
+            minutes = event.start_time.minute
         elif event and not event.start_time:
-            event.start_time = "12:00"
+            event.start_time = datetime.datetime.strptime("12:00", "%H:%M").time()
             context.user_data["event"] = event
 
         reply_markup = generate_time_selector(hours=int(hours), minutes=int(minutes), time_type="start")
@@ -216,20 +212,23 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         hours = 12
         minutes = 0
         if event and event.stop_time:
-            hours, minutes = event.stop_time.split(":")
+            hours = event.stop_time.hour
+            minutes = event.stop_time.minute
         elif event and not event.stop_time:
-            event.stop_time = "12:00"
+            event.stop_time = datetime.datetime.strptime("12:00", "%H:%M").time()
             context.user_data["event"] = event
 
         if event.start_time:
-            hours, minutes = event.start_time.split(":")
+            hours = event.start_time.hour
+            minutes = event.start_time.minute
             hours = int(hours)
             minutes = int(minutes)
 
-            event.stop_time = f"{hours}:{minutes}"
+            # event.stop_time = f"{hours}:{minutes}"
+            event.stop_time = datetime.datetime.strptime(f"{hours:02d}:{minutes:02d}", "%I:%M").time()
             context.user_data["event"] = event
 
-            text += f"\n\n (уже задано время начала события {hours}:{minutes})"
+            text += f"\n\n (уже задано время начала события {hours:02d}:{minutes:02d})"
 
         reply_markup = generate_time_selector(hours=int(hours), minutes=int(minutes), time_type="stop")
         await query.edit_message_text(text=text, reply_markup=reply_markup)
@@ -267,13 +266,15 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         reply_markup = InlineKeyboardMarkup(list_btn)
         await query.edit_message_text(text="Добавь пользователей к событию", reply_markup=reply_markup)
     elif data.startswith("create_event_save_to_db"):
+        await db_controller.save_event(event=event)
+
         participants = ",".join(str(item) for item in event.participants) if event.participants else "..."
         text = (
             "<b>Событие успешно сохранено!</b>"
             f"\n\nДата: <b>{event.get_format_date()}</b>"
             f"\nВремя начала: <b>{event.start_time if event.start_time else '...'}</b>"
             f"\nВремя окончания: <b>{event.stop_time if event.stop_time else '...'}</b>"
-            f"\nОписание: <b>{event.title if event.title else '...'}</b>"
+            f"\nОписание: <b>{event.description if event.description else '...'}</b>"
             f"\nПовтор: <b>{event.recurrent.get_name() if event.recurrent else '...'}</b>"
             f"\nУчастники: <b>{participants}</b>"
         )

@@ -3,6 +3,9 @@ import logging
 from telegram import KeyboardButton, Message, ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+from database.db_controller import db_controller
+from entities import TgUser
+
 logger = logging.getLogger(__name__)
 
 # from models import User
@@ -12,6 +15,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("start")
 
     user = update.effective_user
+    tg_user = TgUser.model_validate(user)
+    await db_controller.save_update_user(tg_user=tg_user)
 
     # user_state.get(user.id)
     # if not user_state:

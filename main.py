@@ -2,7 +2,7 @@ import logging
 import os
 
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.ext import (
     ApplicationBuilder,
     CallbackQueryHandler,
@@ -12,6 +12,7 @@ from telegram.ext import (
     filters,
 )
 
+from database.session import engine
 from handlers.cal import handle_calendar_callback, show_calendar
 from handlers.events import (
     get_event_constructor,
@@ -38,17 +39,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if context.user_data.get("await_event_description"):
         event = context.user_data.get("event")
-        event.title = update.message.text
+        event.description = update.message.text
         context.user_data["event"] = event
 
-        # await update.message.reply_text(
-        #     text=f"Добавлено описание к событию *{event.get_format_date()}*:\n\n{event.title}",
-        #     parse_mode="MarkdownV2"
-        # )
-        title_add = f"Добавлено описание к событию *{event.get_format_date()}*:\n\n{event.title}"
+        description_add = f"Добавлено описание к событию *{event.get_format_date()}*:\n\n{event.description}"
         text, reply_markup = get_event_constructor(event=event)
-        text = title_add + "\n" + text
+        text = description_add + "\n" + text
         await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+
         # получаем кнопки
         context.user_data.pop("await_event_description")
         return
@@ -62,8 +60,16 @@ async def all_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await query.answer()
 
 
+async def set_commands(app):
+    await app.bot.set_my_commands([BotCommand("start", "Запустить бота")])
+
+
+async def shutdown(app):
+    await engine.dispose()
+
+
 def main() -> None:
-    application = ApplicationBuilder().token(TOKEN).build()
+    application = ApplicationBuilder().token(TOKEN).post_shutdown(shutdown).build()
 
     # start, Получение геолокации и Пропуск геолокации
     application.add_handler(CommandHandler("start", start))
@@ -84,6 +90,8 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     application.add_handler(CallbackQueryHandler(all_callbacks))
+
+    application.post_init = set_commands
 
     logger.info("Бот запущен...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
