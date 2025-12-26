@@ -1,6 +1,8 @@
 import logging
+from calendar import monthrange
+from datetime import date
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, extract, or_, select, update
 
 from database.models.event_models import DbEvent
 from database.models.user_model import User as DB_User
@@ -33,9 +35,10 @@ class DBController:
             description=event.description,
             start_time=event.start_time,
             event_date_pickup=event.event_date,
+            single_event=True if event.recurrent == Recurrent.never else False,
             daily=True if event.recurrent == Recurrent.daily else False,
             weekly=event.event_date.weekday() if event.recurrent == Recurrent.weekly else None,
-            monthly=event.event_date.month if event.recurrent == Recurrent.monthly else None,
+            monthly=event.event_date.day if event.recurrent == Recurrent.monthly else None,
             annual_day=event.event_date.day if event.recurrent == Recurrent.annual else None,
             annual_month=event.event_date.month if event.recurrent == Recurrent.annual else None,
             stop_time=event.stop_time,
@@ -44,6 +47,56 @@ class DBController:
         async with AsyncSessionLocal() as session:
             session.add(new_event)
             await session.commit()
+
+    def get_weekday_days_in_month(self, year: int, month: int, weekday: int) -> list[int]:
+        _, num_days = monthrange(year, month)
+        return [day for day in range(1, num_days + 1) if date(year, month, day).weekday() == weekday]
+
+    async def get_current_month_events_by_user(self, user_id, month: int, year: int) -> dict[int, int]:
+        async with AsyncSessionLocal() as session:
+            query = select(DbEvent).where(
+                DbEvent.tg_id == user_id,
+                or_(
+                    and_(
+                        DbEvent.single_event.is_(True),
+                        extract("year", DbEvent.event_date_pickup) == year,
+                        extract("month", DbEvent.event_date_pickup) == month,
+                    ),
+                    DbEvent.daily.is_(True),  # Все ежедневные события
+                    DbEvent.weekly.is_not(None),  # Все еженедельные события
+                    DbEvent.monthly.is_not(None),  # Все ежемесячные события
+                    DbEvent.annual_month == month,  # Все ежегодные, если совпал месяц
+                ),
+            )
+
+            result = (await session.execute(query)).scalars().all()
+
+            _, num_days = monthrange(year, month)
+
+            event_dict = {day: 0 for day in range(1, num_days + 1)}
+            event_dict[0] = 0  # daily events
+            for event in result:
+                if event.single_event is True:
+                    event_dict[event.event_date_pickup.day] += 1
+                elif event.daily is True:
+                    event_dict[0] += 1
+                elif event.monthly is not None:
+                    event_dict[event.monthly] += 1
+                elif event.annual_day is not None:
+                    event_dict[event.annual_day] += 1
+                elif event.weekly is not None:
+                    _weekdays = self.get_weekday_days_in_month(year=year, month=month, weekday=event.weekly)
+                    for _weekday in _weekdays:
+                        event_dict[_weekday] += 1
+
+            if event_dict[0]:
+                add_events = event_dict[0]
+                for key, val in event_dict.items():
+                    if key != 0:
+                        event_dict[key] += add_events
+
+            logger.info(f"event dict: {event_dict}")
+            return event_dict
 
 
 db_controller = DBController()

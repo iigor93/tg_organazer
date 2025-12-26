@@ -224,8 +224,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             hours = int(hours)
             minutes = int(minutes)
 
-            # event.stop_time = f"{hours}:{minutes}"
-            event.stop_time = datetime.datetime.strptime(f"{hours:02d}:{minutes:02d}", "%I:%M").time()
+            event.stop_time = datetime.datetime.strptime(f"{hours:02d}:{minutes:02d}", "%H:%M").time()
             context.user_data["event"] = event
 
             text += f"\n\n (уже задано время начала события {hours:02d}:{minutes:02d})"

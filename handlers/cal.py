@@ -6,15 +6,23 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from config import MONTH_NAMES
+from database.db_controller import db_controller
 
 logger = logging.getLogger(__name__)
 
 
-def generate_calendar(year: int | None = None, month: int | None = None) -> InlineKeyboardMarkup:
+def to_superscript(number: int) -> str:
+    superscript_map = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+    return str(number).translate(superscript_map)
+
+
+async def generate_calendar(user_id: int, year: int | None = None, month: int | None = None) -> InlineKeyboardMarkup:
     today = date.today()
 
     year = year or today.year
     month = month or today.month
+
+    event_dict = await db_controller.get_current_month_events_by_user(user_id=user_id, month=month, year=year)
 
     first_weekday, num_days = monthrange(year, month)
 
@@ -44,8 +52,8 @@ def generate_calendar(year: int | None = None, month: int | None = None) -> Inli
         week.append(InlineKeyboardButton(" ", callback_data="cal_ignore"))
 
     for day in range(1, num_days + 1):
-        # show_day = f"{day}²" if day == today.day else day  # todo тут будем добавлять кол-во задач на сегодня
-        show_day = day
+        number_events = event_dict.get(day)
+        show_day = f"{day}{to_superscript(number_events)}" if number_events else day
         week.append(InlineKeyboardButton(str(show_day), callback_data=f"cal_select_{year}_{month}_{day}"))
 
         if len(week) == 7:
@@ -70,9 +78,10 @@ def generate_calendar(year: int | None = None, month: int | None = None) -> Inli
 
 async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("show_calendar")
+    user_id = update.effective_user.id
 
     today = date.today()
-    reply_markup = generate_calendar(today.year, today.month)
+    reply_markup = await generate_calendar(year=today.year, month=today.month, user_id=user_id)
 
     await update.message.reply_text(
         "📅 Выберите дату события:",
@@ -87,7 +96,7 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
 
     data = query.data
-    # user_id = query.from_user.id
+    user_id = query.from_user.id
     # local_user = user_state[user_id]
 
     if data.startswith("cal_nav_"):
@@ -96,8 +105,8 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
         month = int(month_str)
 
         # Генерируем новый календарь
-        reply_markup = generate_calendar(year, month)
-        await query.edit_message_text("📅 Выберите дату:", reply_markup=reply_markup)
+        reply_markup = await generate_calendar(year=year, month=month, user_id=user_id)
+        await query.edit_message_text("📅 Выберите дату события:", reply_markup=reply_markup)
 
     elif data.startswith("cal_select_"):
         _, _, year_str, month_str, day_str = data.split("_")
@@ -106,7 +115,6 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
         day = day_str
 
         formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
-        # _events = f"✅ Вы выбрали дату: {formatted_date}\n\n{local_user.get_events()}"
         _events = f"✅ Вы выбрали дату: *{formatted_date}*"
 
         reply_btn_create = InlineKeyboardButton("Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}")
