@@ -29,8 +29,6 @@ class DBController:
     async def save_event(self, event: Event) -> None:
         logger.info(f"db_controller save event: {event}")
 
-        print("**** ", type(event.start_time))
-
         new_event = DbEvent(
             description=event.description,
             start_time=event.start_time,
@@ -38,8 +36,10 @@ class DBController:
             daily=True if event.recurrent == Recurrent.daily else False,
             weekly=event.event_date.weekday() if event.recurrent == Recurrent.weekly else None,
             monthly=event.event_date.month if event.recurrent == Recurrent.monthly else None,
-            annual=event.event_date.year if event.recurrent == Recurrent.annual else None,
+            annual_day=event.event_date.day if event.recurrent == Recurrent.annual else None,
+            annual_month=event.event_date.month if event.recurrent == Recurrent.annual else None,
             stop_time=event.stop_time,
+            tg_id=event.tg_id,
         )
         async with AsyncSessionLocal() as session:
             session.add(new_event)

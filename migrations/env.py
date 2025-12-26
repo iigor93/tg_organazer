@@ -7,6 +7,8 @@ from alembic import context
 
 # Импортируйте ваши модели
 from database.session import Base, get_database_url  # или from database import Base
+from database.models.user_model import User
+from database.models.event_models import DbEvent
 
 config = context.config
 if config.config_file_name is not None:

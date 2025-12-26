@@ -28,7 +28,8 @@ exclude = [
     "build",
     "dist",
     "venv",
-    "readme.md"
+    "readme.md",
+    "migrations"
 ]
 
 line-length = 140
