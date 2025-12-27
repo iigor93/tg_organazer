@@ -292,4 +292,5 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
     query = update.callback_query
     await query.answer()
 
-    await query.message.reply_text("Функция 'Удаление события' в разработке 🚧")
+    await db_controller.delete_all_events_by_user(user_id=update.effective_user.id)
+    await query.message.reply_text("Все события удалены 🗑️")

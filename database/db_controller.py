@@ -2,7 +2,7 @@ import logging
 from calendar import monthrange
 from datetime import date
 
-from sqlalchemy import and_, extract, or_, select, update
+from sqlalchemy import and_, delete, extract, or_, select, update
 
 from database.models.event_models import DbEvent
 from database.models.user_model import User as DB_User
@@ -169,6 +169,13 @@ class DBController:
                 )
 
             return "\n".join(event_list)
+
+    @staticmethod
+    async def delete_all_events_by_user(user_id) -> None:
+        query = delete(DbEvent).where(DbEvent.tg_id == user_id)
+        async with AsyncSessionLocal() as session:
+            await session.execute(query)
+            await session.commit()
 
 
 db_controller = DBController()
