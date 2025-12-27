@@ -1,9 +1,10 @@
 import logging
 from calendar import monthrange
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import and_, delete, extract, or_, select, update
 
+from config import NEAREST_EVENTS_DAYS
 from database.models.event_models import DbEvent
 from database.models.user_model import User as DB_User
 from database.session import AsyncSessionLocal
@@ -55,7 +56,7 @@ class DBController:
         _, num_days = monthrange(year, month)
         return [day for day in range(1, num_days + 1) if date(year, month, day).weekday() == weekday]
 
-    async def get_current_month_events_by_user(self, user_id, month: int, year: int) -> dict[int, int]:
+    async def get_current_month_events_by_user(self, user_id: int, month: int, year: int) -> dict[int, int]:
         _, num_days = monthrange(year, month)
 
         last_day_of_month = date.fromisoformat(f"{year}-{month:02d}-{num_days:02d}")
@@ -123,7 +124,7 @@ class DBController:
             return event_dict
 
     @staticmethod
-    async def get_current_day_events_by_user(user_id, month: int, year: int, day: int) -> str:
+    async def get_current_day_events_by_user(user_id: int, month: int, year: int, day: int) -> str:
         pickup_date = date.fromisoformat(f"{year}-{month:02d}-{day:02d}")
         logger.info(f"events for day from db: {pickup_date}, week: {pickup_date.weekday()}")
 
@@ -171,11 +172,83 @@ class DBController:
             return "\n".join(event_list)
 
     @staticmethod
-    async def delete_all_events_by_user(user_id) -> None:
+    async def delete_all_events_by_user(user_id: int) -> None:
         query = delete(DbEvent).where(DbEvent.tg_id == user_id)
         async with AsyncSessionLocal() as session:
             await session.execute(query)
             await session.commit()
+
+    @staticmethod
+    async def get_nearest_events(user_id: int) -> list:
+        start_nearest_date = datetime.now().date()
+        stop_nearest_date = start_nearest_date + timedelta(days=NEAREST_EVENTS_DAYS)
+        days = []
+        months = []
+        years = []
+
+        for _date in range(0, NEAREST_EVENTS_DAYS):
+            _calculated_date = start_nearest_date + timedelta(days=_date)
+            days.append(_calculated_date.day)
+            months.append(_calculated_date.month)
+            years.append(_calculated_date.year)
+
+        async with AsyncSessionLocal() as session:
+            query = (
+                select(DbEvent)
+                .where(
+                    DbEvent.tg_id == user_id,
+                    DbEvent.event_date_pickup <= stop_nearest_date,
+                    or_(
+                        and_(DbEvent.single_event.is_(True), DbEvent.event_date_pickup.between(start_nearest_date, stop_nearest_date)),
+                        DbEvent.daily.is_(True),  # Все ежедневные события
+                        DbEvent.weekly.is_not(None),  # Все еженедельные события ТК у нас 10 дней, то любое недельное событие попадает
+                        DbEvent.monthly.in_(days),  # Все ежемесячные события, если совпал день
+                        and_(
+                            DbEvent.annual_day.in_(days),  # Все ежегодные, если совпал месяц и день
+                            DbEvent.annual_month.in_(months),
+                        ),
+                    ),
+                )
+                .order_by(DbEvent.start_time)
+            )
+
+            result = (await session.execute(query)).scalars().all()
+            for i in result:
+                print("****: ", i.id)
+
+            event_list = []
+
+            for event in result:
+                if event.single_event is True:
+                    event_list.append({datetime.combine(event.event_date_pickup, event.start_time): event.description})
+
+                elif event.daily is True:
+                    for _date in range(0, NEAREST_EVENTS_DAYS):
+                        _calculated_date = start_nearest_date + timedelta(days=_date)
+                        event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
+
+                elif event.monthly is not None:
+                    for _date in range(0, NEAREST_EVENTS_DAYS):
+                        _calculated_date = start_nearest_date + timedelta(days=_date)
+                        if event.monthly == _calculated_date.day:
+                            event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
+                            break
+                elif event.annual_day is not None:
+                    for _date in range(0, NEAREST_EVENTS_DAYS):
+                        _calculated_date = start_nearest_date + timedelta(days=_date)
+                        if event.annual_day == _calculated_date.day and event.annual_month == _calculated_date.month:
+                            event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
+                            break
+
+                elif event.weekly is not None:
+                    for _date in range(0, NEAREST_EVENTS_DAYS):
+                        _calculated_date = start_nearest_date + timedelta(days=_date)
+                        if event.weekly == _calculated_date.weekday():
+                            event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
+
+            if event_list:
+                event_list = sorted(event_list, key=lambda d: list(d.keys())[0])
+            return event_list
 
 
 db_controller = DBController()

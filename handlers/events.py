@@ -283,8 +283,18 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
 async def show_upcoming_events(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("show_upcoming_events")
+    user_id = update.effective_user.id
+    events = await db_controller.get_nearest_events(user_id=user_id)
 
-    await update.message.reply_text("Функция 'Ближайшие события' в разработке 🚧")
+    if events:
+        list_events = ["Ближайшие события:"]
+        for _event in events:
+            list_events.append(f"<b>{list(_event.keys())[0].strftime('%Y-%m-%d %H:%M')}</b> - {list(_event.values())[0]}")
+        text = "\n".join(list_events)
+    else:
+        text = "Ближайшие события не найдены"
+
+    await update.message.reply_text(text, parse_mode="HTML")
 
 
 async def handle_delete_event_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
