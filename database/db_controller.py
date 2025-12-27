@@ -1,6 +1,6 @@
 import logging
 from calendar import monthrange
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import and_, extract, or_, select, update
 
@@ -53,9 +53,14 @@ class DBController:
         return [day for day in range(1, num_days + 1) if date(year, month, day).weekday() == weekday]
 
     async def get_current_month_events_by_user(self, user_id, month: int, year: int) -> dict[int, int]:
+        _, num_days = monthrange(year, month)
+
+        last_day_of_month = datetime.strptime(f"{year}-{month}-{num_days}", "%Y-%m-%d").date()
+
         async with AsyncSessionLocal() as session:
             query = select(DbEvent).where(
                 DbEvent.tg_id == user_id,
+                DbEvent.event_date_pickup <= last_day_of_month,
                 or_(
                     and_(
                         DbEvent.single_event.is_(True),
@@ -70,8 +75,8 @@ class DBController:
             )
 
             result = (await session.execute(query)).scalars().all()
-
-            _, num_days = monthrange(year, month)
+            for i in result:
+                logger.info(f"event id: {i.id}")
 
             event_dict = {day: 0 for day in range(1, num_days + 1)}
             event_dict[0] = 0  # daily events
@@ -81,13 +86,19 @@ class DBController:
                 elif event.daily is True:
                     event_dict[0] += 1
                 elif event.monthly is not None:
-                    event_dict[event.monthly] += 1
+                    try:
+                        event_dict[event.monthly] += 1
+                    except KeyError:
+                        event_dict[num_days] += 1
                 elif event.annual_day is not None:
                     event_dict[event.annual_day] += 1
                 elif event.weekly is not None:
                     _weekdays = self.get_weekday_days_in_month(year=year, month=month, weekday=event.weekly)
                     for _weekday in _weekdays:
-                        event_dict[_weekday] += 1
+                        try:
+                            event_dict[_weekday] += 1
+                        except KeyError:
+                            event_dict[num_days] += 1
 
             if event_dict[0]:
                 add_events = event_dict[0]
