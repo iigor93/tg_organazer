@@ -81,13 +81,13 @@ class DBController:
             for i in result:
                 logger.info(f"event id: {i.id}")
 
-            event_dict = {day: 0 for day in range(1, num_days + 1)}
-            event_dict[0] = 0  # daily events
+            event_dict: dict[int, int | list] = {day: 0 for day in range(1, num_days + 1)}
+            event_dict[0] = []  # daily events
             for event in result:
                 if event.single_event is True:
                     event_dict[event.event_date_pickup.day] += 1
                 elif event.daily is True:
-                    event_dict[0] += 1
+                    event_dict[0].append(event)
                 elif event.monthly is not None:
                     try:
                         event_dict[event.monthly] += 1
@@ -108,14 +108,22 @@ class DBController:
                                 event_dict[num_days] += 1
 
             if event_dict[0]:
-                add_events = event_dict[0]
-                for key, val in event_dict.items():
-                    if key != 0:
-                        event_dict[key] += add_events
+                for daily_event in event_dict[0]:
+                    if (
+                        daily_event.event_date_pickup.month == month and daily_event.event_date_pickup.year == year
+                    ):  # daily for current month
+                        for key, val in event_dict.items():
+                            if key >= daily_event.event_date_pickup.day:
+                                event_dict[key] += 1
+                    else:
+                        for key, val in event_dict.items():
+                            if key != 0:
+                                event_dict[key] += 1
 
             return event_dict
 
-    async def get_current_day_events_by_user(self, user_id, month: int, year: int, day: int) -> str:
+    @staticmethod
+    async def get_current_day_events_by_user(user_id, month: int, year: int, day: int) -> str:
         pickup_date = date.fromisoformat(f"{year}-{month:02d}-{day:02d}")
         logger.info(f"events for day from db: {pickup_date}, week: {pickup_date.weekday()}")
 
