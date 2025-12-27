@@ -271,8 +271,8 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         text = (
             "<b>Событие успешно сохранено!</b>"
             f"\n\nДата: <b>{event.get_format_date()}</b>"
-            f"\nВремя начала: <b>{event.start_time if event.start_time else '...'}</b>"
-            f"\nВремя окончания: <b>{event.stop_time if event.stop_time else '...'}</b>"
+            f"\nВремя начала: <b>{event.start_time.strftime('%H:%M') if event.start_time else '...'}</b>"
+            f"\nВремя окончания: <b>{event.stop_time.strftime('%H:%M') if event.stop_time else '...'}</b>"
             f"\nОписание: <b>{event.description if event.description else '...'}</b>"
             f"\nПовтор: <b>{event.recurrent.get_name() if event.recurrent else '...'}</b>"
             f"\nУчастники: <b>{participants}</b>"
