@@ -1,6 +1,6 @@
 import logging
 from calendar import monthrange
-from datetime import date, datetime
+from datetime import date
 
 from sqlalchemy import and_, extract, or_, select, update
 
@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 class DBController:
-    async def save_update_user(self, tg_user: TgUser) -> None:
+    @staticmethod
+    async def save_update_user(tg_user: TgUser) -> None:
         logger.info(f"db_controller save: {tg_user}")
         async with AsyncSessionLocal() as session:
             query = select(DB_User).where(DB_User.tg_id == tg_user.tg_id)
@@ -28,7 +29,8 @@ class DBController:
 
             await session.commit()
 
-    async def save_event(self, event: Event) -> None:
+    @staticmethod
+    async def save_event(event: Event) -> None:
         logger.info(f"db_controller save event: {event}")
 
         new_event = DbEvent(
@@ -48,14 +50,15 @@ class DBController:
             session.add(new_event)
             await session.commit()
 
-    def get_weekday_days_in_month(self, year: int, month: int, weekday: int) -> list[int]:
+    @staticmethod
+    def get_weekday_days_in_month(year: int, month: int, weekday: int) -> list[int]:
         _, num_days = monthrange(year, month)
         return [day for day in range(1, num_days + 1) if date(year, month, day).weekday() == weekday]
 
     async def get_current_month_events_by_user(self, user_id, month: int, year: int) -> dict[int, int]:
         _, num_days = monthrange(year, month)
 
-        last_day_of_month = datetime.strptime(f"{year}-{month}-{num_days}", "%Y-%m-%d").date()
+        last_day_of_month = date.fromisoformat(f"{year}-{month:02d}-{num_days:02d}")
 
         async with AsyncSessionLocal() as session:
             query = select(DbEvent).where(
@@ -95,10 +98,14 @@ class DBController:
                 elif event.weekly is not None:
                     _weekdays = self.get_weekday_days_in_month(year=year, month=month, weekday=event.weekly)
                     for _weekday in _weekdays:
-                        try:
-                            event_dict[_weekday] += 1
-                        except KeyError:
-                            event_dict[num_days] += 1
+                        if (
+                            _weekday >= event.event_date_pickup.day
+                            or date.fromisoformat(f"{year}-{month:02d}-01") > event.event_date_pickup
+                        ):
+                            try:
+                                event_dict[_weekday] += 1
+                            except KeyError:
+                                event_dict[num_days] += 1
 
             if event_dict[0]:
                 add_events = event_dict[0]
@@ -106,8 +113,54 @@ class DBController:
                     if key != 0:
                         event_dict[key] += add_events
 
-            logger.info(f"event dict: {event_dict}")
             return event_dict
+
+    async def get_current_day_events_by_user(self, user_id, month: int, year: int, day: int) -> str:
+        pickup_date = date.fromisoformat(f"{year}-{month:02d}-{day:02d}")
+        logger.info(f"events for day from db: {pickup_date}, week: {pickup_date.weekday()}")
+
+        async with AsyncSessionLocal() as session:
+            query = (
+                select(DbEvent)
+                .where(
+                    DbEvent.tg_id == user_id,
+                    DbEvent.event_date_pickup <= pickup_date,
+                    or_(
+                        and_(DbEvent.single_event.is_(True), DbEvent.event_date_pickup == pickup_date),
+                        DbEvent.daily.is_(True),  # Все ежедневные события
+                        DbEvent.weekly == pickup_date.weekday(),  # Все еженедельные события
+                        DbEvent.monthly == day,  # Все ежемесячные события, если совпал день
+                        and_(
+                            DbEvent.annual_day == day,  # Все ежегодные, если совпал месяц и день
+                            DbEvent.annual_month == month,
+                        ),
+                    ),
+                )
+                .order_by(DbEvent.start_time)
+            )
+
+            event_list = []
+
+            result = (await session.execute(query)).scalars().all()
+            for event in result:
+                recurrent = ""
+                if event.single_event:
+                    recurrent = "(одиночное)"
+                elif event.daily:
+                    recurrent = f"({Recurrent.daily.get_name().lower()})"
+                elif event.weekly:
+                    recurrent = f"({Recurrent.weekly.get_name().lower()})"
+                elif event.monthly:
+                    recurrent = f"({Recurrent.monthly.get_name().lower()})"
+                elif event.annual_day:
+                    recurrent = f"({Recurrent.annual.get_name().lower()})"
+
+                event_list.append(
+                    f"{event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
+                    f" {recurrent} — {event.description}"
+                )
+
+            return "\n".join(event_list)
 
 
 db_controller = DBController()
