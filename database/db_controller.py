@@ -1,8 +1,9 @@
 import logging
 from calendar import monthrange
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import and_, delete, extract, or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import NEAREST_EVENTS_DAYS
 from database.models.event_models import CanceledEvent, DbEvent
@@ -311,6 +312,43 @@ class DBController:
         async with AsyncSessionLocal() as session:
             session.add(new_cancel_event)
             await session.commit()
+
+    @staticmethod
+    async def get_current_day_events_all_users(event_date: date, event_time: time, session: AsyncSession) -> list:
+        logger.info(f"events for day from db: {event_date}, week: {event_date.weekday()}")
+        logger.info(f"INCOME DATETIME: {event_date}, {event_time}")
+
+        query = (
+            select(DbEvent)
+            .where(
+                DbEvent.event_date_pickup <= event_date,
+                DbEvent.start_time == event_time,
+                or_(
+                    and_(DbEvent.single_event.is_(True), DbEvent.event_date_pickup == event_date),
+                    DbEvent.daily.is_(True),  # Все ежедневные события
+                    DbEvent.weekly == event_date.weekday(),  # Все еженедельные события
+                    DbEvent.monthly == event_date.day,  # Все ежемесячные события, если совпал день
+                    and_(
+                        DbEvent.annual_day == event_date.day,  # Все ежегодные, если совпал месяц и день
+                        DbEvent.annual_month == event_date.month,
+                    ),
+                ),
+            )
+            .order_by(DbEvent.start_time)
+        )
+
+        event_list = []
+        # {"tg_id": "", "start_time": "", "description": ""}
+
+        result = (await session.execute(query)).scalars().all()
+
+        for event in result:
+            if event_date in [_ev.cancel_date for _ev in event.canceled_events]:
+                continue
+
+            event_list.append({"tg_id": event.tg_id, "start_time": event.start_time, "description": event.description})
+
+        return event_list
 
 
 db_controller = DBController()

@@ -1,5 +1,4 @@
 import logging
-import os
 
 from dotenv import load_dotenv
 from telegram import BotCommand, Update
@@ -12,6 +11,7 @@ from telegram.ext import (
     filters,
 )
 
+from config import TOKEN
 from database.session import engine
 from handlers.cal import handle_calendar_callback, show_calendar
 from handlers.events import (
@@ -28,9 +28,6 @@ load_dotenv(".env")
 
 
 logger = logging.getLogger(__name__)
-
-
-TOKEN = os.getenv("TG_BOT_TOKEN")
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
