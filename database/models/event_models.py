@@ -1,4 +1,5 @@
-from sqlalchemy import Boolean, Column, Date, DateTime, Integer, String, Time, func
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Time, func
+from sqlalchemy.orm import relationship
 
 from database.session import Base
 
@@ -20,5 +21,16 @@ class DbEvent(Base):
     stop_time = Column(Time, nullable=True, comment="Время окончания события")
 
     tg_id = Column(Integer, nullable=False, comment="Юзер тг id, кому принадлежит событие")
+    canceled_events = relationship("CanceledEvent", back_populates="event", lazy="selectin", uselist=True, cascade="all, delete-orphan")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class CanceledEvent(Base):
+    __tablename__ = "canceled_events"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    cancel_date = Column(Date, nullable=False, comment="Дата отмены события")
+    event_id = Column(Integer, ForeignKey(DbEvent.id, ondelete="CASCADE"))
+
+    event = relationship(DbEvent, back_populates="canceled_events")

@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import and_, delete, extract, or_, select, update
 
 from config import NEAREST_EVENTS_DAYS
-from database.models.event_models import DbEvent
+from database.models.event_models import CanceledEvent, DbEvent
 from database.models.user_model import User as DB_User
 from database.session import AsyncSessionLocal
 from entities import Event, Recurrent, TgUser
@@ -84,21 +84,33 @@ class DBController:
 
             event_dict: dict[int, int | list] = {day: 0 for day in range(1, num_days + 1)}
             event_dict[0] = []  # daily events
+
             for event in result:
                 if event.single_event is True:
                     event_dict[event.event_date_pickup.day] += 1
                 elif event.daily is True:
                     event_dict[0].append(event)
                 elif event.monthly is not None:
+                    _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{event.monthly:02d}")
+                    if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
+                        continue
+
                     try:
                         event_dict[event.monthly] += 1
                     except KeyError:
                         event_dict[num_days] += 1
                 elif event.annual_day is not None:
+                    _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{event.annual_day:02d}")
+                    if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
+                        continue
                     event_dict[event.annual_day] += 1
                 elif event.weekly is not None:
                     _weekdays = self.get_weekday_days_in_month(year=year, month=month, weekday=event.weekly)
                     for _weekday in _weekdays:
+                        _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{_weekday:02d}")
+                        if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
+                            continue
+
                         if (
                             _weekday >= event.event_date_pickup.day
                             or date.fromisoformat(f"{year}-{month:02d}-01") > event.event_date_pickup
@@ -115,16 +127,23 @@ class DBController:
                     ):  # daily for current month
                         for key, val in event_dict.items():
                             if key >= daily_event.event_date_pickup.day:
+                                _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{key:02d}")
+                                if _calculated_date in [_ev.cancel_date for _ev in daily_event.canceled_events]:
+                                    continue
                                 event_dict[key] += 1
                     else:
                         for key, val in event_dict.items():
                             if key != 0:
+                                _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{key:02d}")
+                                if _calculated_date in [_ev.cancel_date for _ev in daily_event.canceled_events]:
+                                    continue
+
                                 event_dict[key] += 1
 
             return event_dict
 
     @staticmethod
-    async def get_current_day_events_by_user(user_id: int, month: int, year: int, day: int) -> str:
+    async def get_current_day_events_by_user(user_id: int, month: int, year: int, day: int, deleted: bool = False) -> str | list:
         pickup_date = date.fromisoformat(f"{year}-{month:02d}-{day:02d}")
         logger.info(f"events for day from db: {pickup_date}, week: {pickup_date.weekday()}")
 
@@ -151,25 +170,44 @@ class DBController:
             event_list = []
 
             result = (await session.execute(query)).scalars().all()
-            for event in result:
-                recurrent = ""
-                if event.single_event:
-                    recurrent = "(одиночное)"
-                elif event.daily:
-                    recurrent = f"({Recurrent.daily.get_name().lower()})"
-                elif event.weekly:
-                    recurrent = f"({Recurrent.weekly.get_name().lower()})"
-                elif event.monthly:
-                    recurrent = f"({Recurrent.monthly.get_name().lower()})"
-                elif event.annual_day:
-                    recurrent = f"({Recurrent.annual.get_name().lower()})"
 
-                event_list.append(
-                    f"{event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
-                    f" {recurrent} — {event.description}"
-                )
+            if deleted:  # тут выборка для удаления по дню
+                for event in result:
+                    if pickup_date in [_ev.cancel_date for _ev in event.canceled_events]:
+                        continue
+                    event_list.append(
+                        (
+                            f"{event.start_time.strftime('%H:%M')}-"
+                            f"{event.stop_time.strftime('%H:%M') if event.stop_time else ''}\n"
+                            f"{event.description[:20]}",
+                            event.id,
+                            event.single_event,
+                        )
+                    )
+                return event_list
+            else:
+                for event in result:
+                    if pickup_date in [_ev.cancel_date for _ev in event.canceled_events]:
+                        continue
 
-            return "\n".join(event_list)
+                    recurrent = ""
+                    if event.single_event:
+                        recurrent = "(одиночное)"
+                    elif event.daily:
+                        recurrent = f"({Recurrent.daily.get_name().lower()})"
+                    elif event.weekly:
+                        recurrent = f"({Recurrent.weekly.get_name().lower()})"
+                    elif event.monthly:
+                        recurrent = f"({Recurrent.monthly.get_name().lower()})"
+                    elif event.annual_day:
+                        recurrent = f"({Recurrent.annual.get_name().lower()})"
+
+                    event_list.append(
+                        f"{event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
+                        f" {recurrent} — {event.description}"
+                    )
+
+                return "\n".join(event_list)
 
     @staticmethod
     async def delete_all_events_by_user(user_id: int) -> None:
@@ -177,6 +215,15 @@ class DBController:
         async with AsyncSessionLocal() as session:
             await session.execute(query)
             await session.commit()
+
+    @staticmethod
+    async def delete_event_by_id(event_id: int | str) -> tuple:
+        query = delete(DbEvent).where(DbEvent.id == int(event_id)).returning(DbEvent)
+        async with AsyncSessionLocal() as session:
+            result = (await session.execute(query)).scalar_one_or_none()
+            await session.commit()
+
+            return result.single_event, f"{result.start_time.strftime('%H:%M')} {result.description}"
 
     @staticmethod
     async def get_nearest_events(user_id: int) -> list:
@@ -214,7 +261,7 @@ class DBController:
 
             result = (await session.execute(query)).scalars().all()
             for i in result:
-                print("****: ", i.id)
+                print("****: ", i.id, i.canceled_events)
 
             event_list = []
 
@@ -225,17 +272,23 @@ class DBController:
                 elif event.daily is True:
                     for _date in range(0, NEAREST_EVENTS_DAYS):
                         _calculated_date = start_nearest_date + timedelta(days=_date)
+                        if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
+                            continue
                         event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
 
                 elif event.monthly is not None:
                     for _date in range(0, NEAREST_EVENTS_DAYS):
                         _calculated_date = start_nearest_date + timedelta(days=_date)
+                        if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
+                            continue
                         if event.monthly == _calculated_date.day:
                             event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
                             break
                 elif event.annual_day is not None:
                     for _date in range(0, NEAREST_EVENTS_DAYS):
                         _calculated_date = start_nearest_date + timedelta(days=_date)
+                        if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
+                            continue
                         if event.annual_day == _calculated_date.day and event.annual_month == _calculated_date.month:
                             event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
                             break
@@ -243,12 +296,21 @@ class DBController:
                 elif event.weekly is not None:
                     for _date in range(0, NEAREST_EVENTS_DAYS):
                         _calculated_date = start_nearest_date + timedelta(days=_date)
+                        if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
+                            continue
                         if event.weekly == _calculated_date.weekday():
                             event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
 
             if event_list:
                 event_list = sorted(event_list, key=lambda d: list(d.keys())[0])
             return event_list
+
+    @staticmethod
+    async def create_cancel_event(event_id: int, cancel_date: date) -> None:
+        new_cancel_event = CanceledEvent(cancel_date=cancel_date, event_id=int(event_id))
+        async with AsyncSessionLocal() as session:
+            session.add(new_cancel_event)
+            await session.commit()
 
 
 db_controller = DBController()
