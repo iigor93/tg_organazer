@@ -39,6 +39,7 @@ class Event(BaseModel):
     stop_time: datetime.time | None = None
     recurrent: Recurrent = Recurrent.never
     participants: list[int | None] = Field(default_factory=list)
+    all_user_participants: dict[int, str] = Field(default_factory=dict)
     tg_id: int
 
     def get_date(self) -> tuple[int, int, int]:

@@ -14,10 +14,12 @@ from telegram.ext import (
 from config import TOKEN
 from database.session import engine
 from handlers.cal import handle_calendar_callback, show_calendar
+from handlers.contacts import handle_contact
 from handlers.events import (
     get_event_constructor,
     handle_create_event_callback,
     handle_delete_event_callback,
+    handle_event_participants_callback,
     handle_participants_callback,
     handle_time_callback,
     show_upcoming_events,
@@ -40,7 +42,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         context.user_data["event"] = event
 
         description_add = f"Добавлено описание к событию *{event.get_format_date()}*:\n\n{event.description}"
-        text, reply_markup = get_event_constructor(event=event)
+        has_participants = bool(event.all_user_participants)
+
+        text, reply_markup = get_event_constructor(event=event, has_participants=has_participants)
         text = description_add + "\n" + text
         await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
@@ -82,8 +86,10 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_create_event_callback, pattern="^create_event_"))
     application.add_handler(CallbackQueryHandler(handle_delete_event_callback, pattern="^delete_event_"))
     application.add_handler(CallbackQueryHandler(handle_participants_callback, pattern="^participants_"))
+    application.add_handler(CallbackQueryHandler(handle_event_participants_callback, pattern="^create_participant_event_"))
     application.add_handler(MessageHandler(filters.Regex("^🗓 Ближайшие события$"), show_upcoming_events))
 
+    application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     application.add_handler(CallbackQueryHandler(all_callbacks))

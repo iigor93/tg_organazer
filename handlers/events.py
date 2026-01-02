@@ -2,10 +2,11 @@ import datetime
 import logging
 from datetime import date, time
 
+import telegram
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from config import MONTH_NAMES
+from config import MONTH_NAMES, TOKEN
 from database.db_controller import db_controller
 from entities import Event, Recurrent
 
@@ -42,7 +43,6 @@ async def handle_participants_callback(update: Update, context: ContextTypes.DEF
 
     query = update.callback_query
     await query.answer()
-
     event: Event | None = context.user_data.get("event")
 
     tg_id_income = int(query.data.split("_")[1])
@@ -54,9 +54,8 @@ async def handle_participants_callback(update: Update, context: ContextTypes.DEF
 
     context.user_data["event"] = event
 
-    participants = {1: "Вася", 2: "Петя", 3: "Маша"}  # todo брать из юзера
     list_btn = []
-    for tg_id, name in participants.items():
+    for tg_id, name in event.all_user_participants.items():
         if tg_id in event.participants:
             name = f"{name} ✅"
         else:
@@ -121,7 +120,9 @@ async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.edit_message_reply_markup(reply_markup=reply_markup)
 
 
-def get_event_constructor(event: Event, year: int | None = None, month: int | None = None, day: int | None = None):
+def get_event_constructor(
+    event: Event, year: int | None = None, month: int | None = None, day: int | None = None, has_participants: bool = False
+):
     start_time = "Начало *"
     stop_time = "Окончание"
     description = "Описание *"
@@ -153,10 +154,10 @@ def get_event_constructor(event: Event, year: int | None = None, month: int | No
     description_btn = InlineKeyboardButton(text=description, callback_data=f"create_event_description_{year}_{month}_{day}")
     recurrent_btn = InlineKeyboardButton(text=recurrent, callback_data=f"create_event_recurrent_{year}_{month}_{day}")
     participants_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_participants_{year}_{month}_{day}")
-    buttons = [[start_btn, stop_btn], [description_btn], [recurrent_btn], [participants_btn]]
+    buttons = [[start_btn, stop_btn], [description_btn], [recurrent_btn]]
 
-    # if user.participants:  # todo тут будем проверять есть ли у юзера вообще связные люди
-    #     buttons.append([participants_btn])
+    if has_participants:
+        buttons.append([participants_btn])
 
     if show_create_btn:
         create_btn = InlineKeyboardButton(text="💾 Сохранить событие", callback_data="create_event_save_to_db")
@@ -172,6 +173,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
     query = update.callback_query
     await query.answer()
     data = query.data
+    user_id = update.effective_user.id
 
     event: Event | None = context.user_data.get("event")
     if not event:
@@ -190,7 +192,11 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         except:  # noqa
             ...
 
-        text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day)
+        participants: dict[int, str] = await db_controller.get_participants(tg_id=user_id)
+        context.user_data["event"].all_user_participants = participants
+
+        has_participants = bool(event.all_user_participants)
+        text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
     elif data.startswith("create_event_start_"):
@@ -241,7 +247,8 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         event.recurrent = Recurrent(recurrent)
         context.user_data["event"] = event
 
-        text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day)
+        has_participants = bool(event.all_user_participants)
+        text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
     elif data.startswith("create_event_recurrent_"):
@@ -253,9 +260,8 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text="Как часто повторять событие:", reply_markup=reply_markup)
 
     elif data.startswith("create_event_participants_"):
-        participants = {1: "Вася", 2: "Петя", 3: "Маша"}  # todo брать из юзера
         list_btn = []
-        for tg_id, name in participants.items():
+        for tg_id, name in event.all_user_participants.items():
             if tg_id in event.participants:
                 name = f"{name} ✅"
             list_btn.append([InlineKeyboardButton(name, callback_data=f"participants_{tg_id}")])
@@ -265,9 +271,13 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         reply_markup = InlineKeyboardMarkup(list_btn)
         await query.edit_message_text(text="Добавь пользователей к событию", reply_markup=reply_markup)
     elif data.startswith("create_event_save_to_db"):
-        await db_controller.save_event(event=event)
+        event_id = await db_controller.save_event(event=event)
+        participants_str = "..."
+        if event.participants:
+            participants_str = ""
+            for _user_id, _user_name in event.all_user_participants.items():
+                participants_str += f"\n- {_user_name}" if _user_id in event.participants else ""
 
-        participants = ",".join(str(item) for item in event.participants) if event.participants else "..."
         text = (
             "<b>Событие успешно сохранено!</b>"
             f"\n\nДата: <b>{event.get_format_date()}</b>"
@@ -275,10 +285,34 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             f"\nВремя окончания: <b>{event.stop_time.strftime('%H:%M') if event.stop_time else '...'}</b>"
             f"\nОписание: <b>{event.description if event.description else '...'}</b>"
             f"\nПовтор: <b>{event.recurrent.get_name() if event.recurrent else '...'}</b>"
-            f"\nУчастники: <b>{participants}</b>"
+            f"\nУчастники: <b>{participants_str}</b>"
         )
         context.user_data.pop("event")
         await query.edit_message_text(text=text, parse_mode="HTML")
+
+        if event.participants:
+            await send_event_to_participants(
+                event_creator=update.effective_user.first_name, event=event, event_id=event_id, participants=event.participants
+            )
+
+
+async def send_event_to_participants(event_creator: str, event: Event, event_id: int, participants: list[int]) -> None:
+    text = (
+        f"{str(event_creator).title()} добавил событие"
+        f"\n{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year} "
+        f"время {event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
+        f"\n{event.description}"
+    )
+
+    btn = [
+        [InlineKeyboardButton("Добавить в мой календарь", callback_data=f"create_participant_event_{event_id}")],
+        [InlineKeyboardButton("Не добавлять", callback_data="create_participant_event_cancel")],
+    ]
+
+    reply_markup = InlineKeyboardMarkup(btn)
+    bot = telegram.Bot(token=TOKEN)
+    for user in participants:
+        await bot.send_message(chat_id=user, text=text, reply_markup=reply_markup)
 
 
 async def show_upcoming_events(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -373,3 +407,21 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
 
         reply_markup = InlineKeyboardMarkup(list_btn)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
+
+
+async def handle_event_participants_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("handle_event_participants_callback")
+    query = update.callback_query
+    user_id = update.effective_user.id
+    data = query.data
+
+    if "cancel" in data:
+        await query.edit_message_text(text="Событие не добавлено в календарь")
+        return
+
+    _, _, _, event_id = data.split("_")
+    event_text = await db_controller.resave_event_to_participant(event_id=event_id, user_id=user_id)
+    if event_text:
+        await query.edit_message_text(text=event_text)
+    else:
+        await query.edit_message_text(text="Что то пошло не так...")

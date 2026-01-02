@@ -3,11 +3,14 @@ from calendar import monthrange
 from datetime import date, datetime, time, timedelta
 
 from sqlalchemy import and_, delete, extract, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from config import NEAREST_EVENTS_DAYS
 from database.models.event_models import CanceledEvent, DbEvent
 from database.models.user_model import User as DB_User
+from database.models.user_model import UserRelation
 from database.session import AsyncSessionLocal
 from entities import Event, Recurrent, TgUser
 
@@ -16,23 +19,77 @@ logger = logging.getLogger(__name__)
 
 class DBController:
     @staticmethod
-    async def save_update_user(tg_user: TgUser) -> None:
+    async def save_update_user(tg_user: TgUser, from_contact: bool = False, current_user: int | None = None) -> None | TgUser:
         logger.info(f"db_controller save: {tg_user}")
         async with AsyncSessionLocal() as session:
             query = select(DB_User).where(DB_User.tg_id == tg_user.tg_id)
             result = (await session.execute(query)).scalar_one_or_none()
 
             if not result:
-                new_user = DB_User(**tg_user.model_dump())
-                session.add(new_user)
+                user = DB_User(**tg_user.model_dump())
+                user.is_active = False if from_contact else True
+                session.add(user)
             else:
-                update_query = update(DB_User).where(DB_User.tg_id == tg_user.tg_id).values(**tg_user.model_dump())
-                await session.execute(update_query)
+                tg_user_dict = tg_user.model_dump()
+                if from_contact:
+                    tg_user_dict.pop("is_active")
+                update_query = update(DB_User).where(DB_User.tg_id == tg_user.tg_id).values(**tg_user_dict).returning(DB_User)
+                user = (await session.execute(update_query)).scalar_one_or_none()
 
             await session.commit()
+            await session.refresh(user)
+
+            print("** current user: ", user.id)
+
+            if from_contact and current_user:
+                current_user_query = select(DB_User).where(DB_User.tg_id == current_user)
+                current_user = (await session.execute(current_user_query)).scalar_one_or_none()
+
+                new_user_relation = UserRelation(
+                    user_id=current_user.id,
+                    related_user_id=user.id,
+                )
+                session.add(new_user_relation)
+
+                try:
+                    await session.commit()
+                except IntegrityError:
+                    return None
+
+        user.id = user.tg_id
+        return TgUser.model_validate(user)
 
     @staticmethod
-    async def save_event(event: Event) -> None:
+    async def get_user(tg_id: int) -> dict | None:
+        ...
+        # async with AsyncSessionLocal() as session:
+        #     query = select(DB_User).where(DB_User.tg_id == tg_id)
+        #
+        #     user = (await session.execute(query)).unique().scalar_one_or_none()
+        #     await session.refresh(user)
+        #     print("***** ", user.__dict__)
+        #     for i in user.related_users:
+        #         print(i.__dict__)
+        #     # print("***** ", user.related_users)
+
+    @staticmethod
+    async def get_participants(tg_id: int) -> dict[int, str] | None:
+        async with AsyncSessionLocal() as session:
+            db_user_alias = aliased(DB_User)
+            query = (
+                select(DB_User)
+                .join(UserRelation, DB_User.id == UserRelation.related_user_id)
+                .join(db_user_alias, UserRelation.user_id == db_user_alias.id)
+                .where(db_user_alias.tg_id == tg_id, DB_User.is_active.is_(True))
+            )
+
+            participants = (await session.execute(query)).scalars().all()
+
+            print("***** participants: ", participants)
+            return {item.tg_id: item.first_name for item in participants}
+
+    @staticmethod
+    async def save_event(event: Event) -> int | None:
         logger.info(f"db_controller save event: {event}")
 
         new_event = DbEvent(
@@ -51,6 +108,9 @@ class DBController:
         async with AsyncSessionLocal() as session:
             session.add(new_event)
             await session.commit()
+            await session.refresh(new_event)
+
+            return new_event.id
 
     @staticmethod
     def get_weekday_days_in_month(year: int, month: int, weekday: int) -> list[int]:
@@ -349,6 +409,41 @@ class DBController:
             event_list.append({"tg_id": event.tg_id, "start_time": event.start_time, "description": event.description})
 
         return event_list
+
+    @staticmethod
+    async def resave_event_to_participant(event_id: int, user_id: int) -> str | None:
+        async with AsyncSessionLocal() as session:
+            query = select(DbEvent).where(DbEvent.id == event_id)
+            event = (await session.execute(query)).scalar_one_or_none()
+
+            if not event:
+                return None
+
+            new_event = DbEvent(
+                description=event.description,
+                start_time=event.start_time,
+                event_date_pickup=event.event_date_pickup,
+                single_event=event.single_event,
+                daily=event.daily,
+                weekly=event.weekly,
+                monthly=event.monthly,
+                annual_day=event.annual_day,
+                annual_month=event.annual_month,
+                stop_time=event.stop_time,
+                tg_id=user_id,
+            )
+
+            session.add(new_event)
+            await session.commit()
+
+            text = (
+                f"Событие добавлено в календарь:"
+                f"\n{event.event_date_pickup.day}.{event.event_date_pickup.month:02d}.{event.event_date_pickup.year} "
+                f"время {event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
+                f"\n{event.description}"
+            )
+
+            return text
 
 
 db_controller = DBController()

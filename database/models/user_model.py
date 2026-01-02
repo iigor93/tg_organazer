@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, func, true
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, func, true
 
 from database.session import Base
 
@@ -18,3 +18,10 @@ class User(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class UserRelation(Base):
+    __tablename__ = "user_relations"
+
+    user_id = Column(Integer, ForeignKey(User.id, ondelete="CASCADE"), primary_key=True)
+    related_user_id = Column(Integer, ForeignKey(User.id, ondelete="CASCADE"), primary_key=True)

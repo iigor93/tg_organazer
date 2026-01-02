@@ -16,7 +16,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     user = update.effective_user
     tg_user = TgUser.model_validate(user)
-    await db_controller.save_update_user(tg_user=tg_user)
+    db_user = await db_controller.save_update_user(tg_user=tg_user)
+
+    logger.info(f"*** DB user: {db_user}")
 
     # user_state.get(user.id)
     # if not user_state:
