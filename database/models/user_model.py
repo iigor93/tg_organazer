@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, func, true
+from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, func, true
 
 from database.session import Base
 
@@ -6,8 +6,8 @@ from database.session import Base
 class User(Base):
     __tablename__ = "tg_users"
 
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    tg_id = Column(Integer, index=True, nullable=False, unique=True)
+    id = Column(Integer, primary_key=True, index=True)
+    tg_id = Column(BigInteger, index=True, nullable=False, unique=True)
     is_active = Column(Boolean, server_default=true(), comment="Признак, писал ли пользователь боту")
 
     username = Column(String(), nullable=True)
