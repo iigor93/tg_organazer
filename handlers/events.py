@@ -31,7 +31,6 @@ def generate_time_selector(hours: int = 12, minutes: int = 0, time_type: str = "
             InlineKeyboardButton("▼️", callback_data=f"time_hour_down_{time_type}_{hours}_{minutes}"),
             InlineKeyboardButton("▼️", callback_data=f"time_minute_down_{time_type}_{hours}_{minutes}"),
         ],
-        # [InlineKeyboardButton("✅ OK", callback_data=f"time_confirm_{time_type}_{hours}_{minutes}")],
         [InlineKeyboardButton("✅ OK", callback_data="create_event_begin_")],
     ]
 
@@ -291,28 +290,40 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text=text, parse_mode="HTML")
 
         if event.participants:
-            await send_event_to_participants(
-                event_creator=update.effective_user.first_name, event=event, event_id=event_id, participants=event.participants
+            bot = telegram.Bot(token=TOKEN)
+
+            text = (
+                f"{str(update.effective_user.first_name).title()} добавил событие"
+                f"\n{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year} "
+                f"время {event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
+                f"\n{event.description}"
             )
 
+            for user in event.participants:
+                new_event_id = await db_controller.resave_event_to_participant(event_id=event_id, user_id=user)
+                btn = [[InlineKeyboardButton("Не добавлять", callback_data=f"create_participant_event_cancel_{new_event_id}")]]
+                reply_markup = InlineKeyboardMarkup(btn)
+                await bot.send_message(chat_id=user, text=text, reply_markup=reply_markup)
 
-async def send_event_to_participants(event_creator: str, event: Event, event_id: int, participants: list[int]) -> None:
-    text = (
-        f"{str(event_creator).title()} добавил событие"
-        f"\n{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year} "
-        f"время {event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
-        f"\n{event.description}"
-    )
 
-    btn = [
-        [InlineKeyboardButton("Добавить в мой календарь", callback_data=f"create_participant_event_{event_id}")],
-        [InlineKeyboardButton("Не добавлять", callback_data="create_participant_event_cancel")],
-    ]
-
-    reply_markup = InlineKeyboardMarkup(btn)
-    bot = telegram.Bot(token=TOKEN)
-    for user in participants:
-        await bot.send_message(chat_id=user, text=text, reply_markup=reply_markup)
+# async def send_event_to_participants(event_creator: str, event: Event, event_id: int, participants: list[int]) -> None:
+#
+#     text = (
+#         f"{str(event_creator).title()} добавил событие"
+#         f"\n{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year} "
+#         f"время {event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
+#         f"\n{event.description}"
+#     )
+#
+#     btn = [
+#         [InlineKeyboardButton("Добавить в мой календарь", callback_data=f"create_participant_event_{event_id}")],
+#         [InlineKeyboardButton("Не добавлять", callback_data="create_participant_event_cancel")],
+#     ]
+#
+#     reply_markup = InlineKeyboardMarkup(btn)
+#     bot = telegram.Bot(token=TOKEN)
+#     for user in participants:
+#         await bot.send_message(chat_id=user, text=text, reply_markup=reply_markup)
 
 
 async def show_upcoming_events(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -339,7 +350,6 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
     data = query.data
 
     if "_id_" in data:
-        print("ID: ", data)
         _, _, _, db_id, year, month, day = data.split("_")
         formatted_date = f"{day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года"
         deleted_event = await db_controller.delete_event_by_id(event_id=db_id)
@@ -352,7 +362,6 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
 
     elif "_recurDay_" in data:  # удаление повторяющегося события на конкретную дату
         _, _, _, db_id, year, month, day = data.split("_")
-        print("recurrent date del: ", data)
         year = int(year)
         month = int(month)
         day = int(day)
@@ -362,7 +371,6 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text=f"Событие на дату {formatted_date} удалено", parse_mode="HTML")
 
     elif "_recurrent_" in data:
-        print("recurrent ID: ", data)
         _, _, _, db_id, year, month, day = data.split("_")
 
         formatted_date = f"{day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года"
@@ -412,16 +420,10 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
 async def handle_event_participants_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("handle_event_participants_callback")
     query = update.callback_query
-    user_id = update.effective_user.id
     data = query.data
 
     if "cancel" in data:
+        _, _, _, _, event_id = data.split("_")
+        await db_controller.delete_event_by_id(event_id=event_id)
         await query.edit_message_text(text="Событие не добавлено в календарь")
         return
-
-    _, _, _, event_id = data.split("_")
-    event_text = await db_controller.resave_event_to_participant(event_id=event_id, user_id=user_id)
-    if event_text:
-        await query.edit_message_text(text=event_text)
-    else:
-        await query.edit_message_text(text="Что то пошло не так...")

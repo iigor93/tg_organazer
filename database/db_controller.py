@@ -39,8 +39,6 @@ class DBController:
             await session.commit()
             await session.refresh(user)
 
-            print("** current user: ", user.id)
-
             if from_contact and current_user:
                 current_user_query = select(DB_User).where(DB_User.tg_id == current_user)
                 current_user = (await session.execute(current_user_query)).scalar_one_or_none()
@@ -60,17 +58,7 @@ class DBController:
         return TgUser.model_validate(user)
 
     @staticmethod
-    async def get_user(tg_id: int) -> dict | None:
-        ...
-        # async with AsyncSessionLocal() as session:
-        #     query = select(DB_User).where(DB_User.tg_id == tg_id)
-        #
-        #     user = (await session.execute(query)).unique().scalar_one_or_none()
-        #     await session.refresh(user)
-        #     print("***** ", user.__dict__)
-        #     for i in user.related_users:
-        #         print(i.__dict__)
-        #     # print("***** ", user.related_users)
+    async def get_user(tg_id: int) -> dict | None: ...
 
     @staticmethod
     async def get_participants(tg_id: int) -> dict[int, str] | None:
@@ -85,7 +73,6 @@ class DBController:
 
             participants = (await session.execute(query)).scalars().all()
 
-            print("***** participants: ", participants)
             return {item.tg_id: item.first_name for item in participants}
 
     @staticmethod
@@ -140,8 +127,6 @@ class DBController:
             )
 
             result = (await session.execute(query)).scalars().all()
-            for i in result:
-                logger.info(f"event id: {i.id}")
 
             event_dict: dict[int, int | list] = {day: 0 for day in range(1, num_days + 1)}
             event_dict[0] = []  # daily events
@@ -321,8 +306,6 @@ class DBController:
             )
 
             result = (await session.execute(query)).scalars().all()
-            for i in result:
-                print("****: ", i.id, i.canceled_events)
 
             event_list = []
 
@@ -411,7 +394,7 @@ class DBController:
         return event_list
 
     @staticmethod
-    async def resave_event_to_participant(event_id: int, user_id: int) -> str | None:
+    async def resave_event_to_participant(event_id: int, user_id: int) -> int | None:
         async with AsyncSessionLocal() as session:
             query = select(DbEvent).where(DbEvent.id == event_id)
             event = (await session.execute(query)).scalar_one_or_none()
@@ -435,15 +418,16 @@ class DBController:
 
             session.add(new_event)
             await session.commit()
+            await session.refresh(new_event)
+            #
+            # text = (
+            #     f"Событие добавлено в календарь:"
+            #     f"\n{event.event_date_pickup.day}.{event.event_date_pickup.month:02d}.{event.event_date_pickup.year} "
+            #     f"время {event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
+            #     f"\n{event.description}"
+            # )
 
-            text = (
-                f"Событие добавлено в календарь:"
-                f"\n{event.event_date_pickup.day}.{event.event_date_pickup.month:02d}.{event.event_date_pickup.year} "
-                f"время {event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
-                f"\n{event.description}"
-            )
-
-            return text
+            return new_event.id
 
 
 db_controller = DBController()
