@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("start")
 
-    user = update.effective_user
+    # user = update.effective_user
+    user = update.effective_chat
     tg_user = TgUser.model_validate(user)
     db_user = await db_controller.save_update_user(tg_user=tg_user)
 
@@ -24,7 +25,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # if not user_state:
     #     user_state[user.id] = User(telegram_id=user.id)
 
-    keyboard = [[KeyboardButton("📍 Поделиться геолокацией", request_location=True)], [KeyboardButton("⏭ Пропустить")]]
+    keyboard = [
+        # [KeyboardButton("📍 Поделиться геолокацией", request_location=True)],
+        [KeyboardButton("⏭ Пропустить")]
+    ]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
     await update.message.reply_text(
