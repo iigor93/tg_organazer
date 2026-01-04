@@ -137,7 +137,8 @@ class DBController:
                 elif event.daily is True:
                     event_dict[0].append(event)
                 elif event.monthly is not None:
-                    _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{event.monthly:02d}")
+                    _day = event.monthly if event.monthly <= last_day_of_month.day else last_day_of_month.day
+                    _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{_day:02d}")
                     if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
                         continue
 
