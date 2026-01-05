@@ -333,7 +333,7 @@ class DBController:
                         _calculated_date = start_nearest_date + timedelta(days=_date)
                         if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
                             continue
-                        effective_day = self.get_effective_month_day(
+                        effective_day = DBController.get_effective_month_day(
                             _calculated_date.year, _calculated_date.month, event.monthly
                         )
                         if _calculated_date.day == effective_day:
