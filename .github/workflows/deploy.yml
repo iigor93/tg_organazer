@@ -3,9 +3,6 @@ name: Deploy to Server
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    types: [closed]
-    branches: [ "main" ]
 
 jobs:
   deploy:
