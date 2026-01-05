@@ -1,10 +1,11 @@
 import logging
 from calendar import monthrange
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+import config
 from config import MONTH_NAMES
 from database.db_controller import db_controller
 
@@ -16,11 +17,8 @@ def to_superscript(number: int) -> str:
     return str(number).translate(superscript_map)
 
 
-async def generate_calendar(user_id: int, year: int | None = None, month: int | None = None) -> InlineKeyboardMarkup:
-    today = date.today()
-
-    year = year or today.year
-    month = month or today.month
+async def generate_calendar(user_id: int, year: int, month: int) -> InlineKeyboardMarkup:
+    today = date.today()  # это для кнопки СЕГОДНЯ внизу календаря
 
     event_dict = await db_controller.get_current_month_events_by_user(user_id=user_id, month=month, year=year)
 
@@ -78,9 +76,12 @@ async def generate_calendar(user_id: int, year: int | None = None, month: int | 
 
 async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("show_calendar")
-    user_id = update.effective_user.id
+    logger.info(update)
+    user_id = update.effective_chat.id
 
-    today = date.today()
+    today = datetime.now(tz=timezone.utc) + timedelta(hours=config.DEFAULT_TIMEZONE)
+    # today = дата пользователя с учетом его тайм зоны
+
     reply_markup = await generate_calendar(year=today.year, month=today.month, user_id=user_id)
 
     await update.message.reply_text(

@@ -1,12 +1,13 @@
 import logging
 from calendar import monthrange
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import and_, delete, extract, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+import config
 from config import NEAREST_EVENTS_DAYS
 from database.models.event_models import CanceledEvent, DbEvent
 from database.models.user_model import User as DB_User
@@ -84,17 +85,31 @@ class DBController:
     async def save_event(event: Event) -> int | None:
         logger.info(f"db_controller save event: {event}")
 
+        start_datetime_tz = (
+            datetime.combine(event.event_date, event.start_time)
+            .replace(tzinfo=timezone(timedelta(hours=config.DEFAULT_TIMEZONE, minutes=0)))
+            .astimezone(timezone.utc)
+        )
+
+        stop_datetime_tz = None
+        if event.stop_time:
+            stop_datetime_tz = (
+                datetime.combine(event.event_date, event.stop_time)
+                .replace(tzinfo=timezone(timedelta(hours=config.DEFAULT_TIMEZONE, minutes=0)))
+                .astimezone(timezone.utc)
+            )
+
         new_event = DbEvent(
             description=event.description,
-            start_time=event.start_time,
-            event_date_pickup=event.event_date,
+            start_time=start_datetime_tz.time(),
+            event_date_pickup=start_datetime_tz.date(),
             single_event=True if event.recurrent == Recurrent.never else False,
             daily=True if event.recurrent == Recurrent.daily else False,
-            weekly=event.event_date.weekday() if event.recurrent == Recurrent.weekly else None,
-            monthly=event.event_date.day if event.recurrent == Recurrent.monthly else None,
-            annual_day=event.event_date.day if event.recurrent == Recurrent.annual else None,
-            annual_month=event.event_date.month if event.recurrent == Recurrent.annual else None,
-            stop_time=event.stop_time,
+            weekly=start_datetime_tz.weekday() if event.recurrent == Recurrent.weekly else None,
+            monthly=start_datetime_tz.day if event.recurrent == Recurrent.monthly else None,
+            annual_day=start_datetime_tz.day if event.recurrent == Recurrent.annual else None,
+            annual_month=start_datetime_tz.month if event.recurrent == Recurrent.annual else None,
+            stop_time=stop_datetime_tz.time() if stop_datetime_tz else event.stop_time,
             tg_id=event.tg_id,
         )
         async with AsyncSessionLocal() as session:
@@ -280,7 +295,7 @@ class DBController:
             return result.single_event, f"{result.start_time.strftime('%H:%M')} {result.description}"
 
     @staticmethod
-    async def get_nearest_events(user_id: int) -> list:
+    async def get_nearest_events(self, user_id: int) -> list:
         start_nearest_date = datetime.now().date()
         stop_nearest_date = start_nearest_date + timedelta(days=NEAREST_EVENTS_DAYS)
         days = []
@@ -333,9 +348,7 @@ class DBController:
                         _calculated_date = start_nearest_date + timedelta(days=_date)
                         if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
                             continue
-                        effective_day = self.get_effective_month_day(
-                            _calculated_date.year, _calculated_date.month, event.monthly
-                        )
+                        effective_day = self.get_effective_month_day(_calculated_date.year, _calculated_date.month, event.monthly)
                         if _calculated_date.day == effective_day:
                             event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
                             break
