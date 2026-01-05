@@ -196,7 +196,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
         has_participants = bool(event.all_user_participants)
         text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants)
-        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+        await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
     elif data.startswith("create_event_start_"):
         hours = 12

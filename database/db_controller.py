@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 
 class DBController:
     @staticmethod
+    def get_effective_month_day(year: int, month: int, day: int) -> int:
+        _, num_days = monthrange(year, month)
+        return day if day <= num_days else num_days
+
+    @staticmethod
     async def save_update_user(tg_user: TgUser, from_contact: bool = False, current_user: int | None = None) -> None | TgUser:
         logger.info(f"db_controller save: {tg_user}")
         async with AsyncSessionLocal() as session:
@@ -137,15 +142,12 @@ class DBController:
                 elif event.daily is True:
                     event_dict[0].append(event)
                 elif event.monthly is not None:
-                    _day = event.monthly if event.monthly <= last_day_of_month.day else last_day_of_month.day
-                    _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{_day:02d}")
+                    effective_day = self.get_effective_month_day(year, month, event.monthly)
+                    _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{effective_day:02d}")
                     if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
                         continue
 
-                    try:
-                        event_dict[event.monthly] += 1
-                    except KeyError:
-                        event_dict[num_days] += 1
+                    event_dict[effective_day] += 1
                 elif event.annual_day is not None:
                     _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{event.annual_day:02d}")
                     if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
@@ -191,6 +193,11 @@ class DBController:
 
     @staticmethod
     async def get_current_day_events_by_user(user_id: int, month: int, year: int, day: int, deleted: bool = False) -> str | list:
+        last_day = monthrange(year, month)[1]
+        monthly_clause = DbEvent.monthly == day
+        if day == last_day:
+            monthly_clause = or_(monthly_clause, DbEvent.monthly > last_day)
+
         pickup_date = date.fromisoformat(f"{year}-{month:02d}-{day:02d}")
         logger.info(f"events for day from db: {pickup_date}, week: {pickup_date.weekday()}")
 
@@ -204,7 +211,7 @@ class DBController:
                         and_(DbEvent.single_event.is_(True), DbEvent.event_date_pickup == pickup_date),
                         DbEvent.daily.is_(True),  # Все ежедневные события
                         DbEvent.weekly == pickup_date.weekday(),  # Все еженедельные события
-                        DbEvent.monthly == day,  # Все ежемесячные события, если совпал день
+                        monthly_clause,  # Все ежемесячные события, если совпал день
                         and_(
                             DbEvent.annual_day == day,  # Все ежегодные, если совпал месяц и день
                             DbEvent.annual_month == month,
@@ -296,7 +303,7 @@ class DBController:
                         and_(DbEvent.single_event.is_(True), DbEvent.event_date_pickup.between(start_nearest_date, stop_nearest_date)),
                         DbEvent.daily.is_(True),  # Все ежедневные события
                         DbEvent.weekly.is_not(None),  # Все еженедельные события ТК у нас 10 дней, то любое недельное событие попадает
-                        DbEvent.monthly.in_(days),  # Все ежемесячные события, если совпал день
+                        DbEvent.monthly.is_not(None),  # Все ежемесячные события, если совпал день
                         and_(
                             DbEvent.annual_day.in_(days),  # Все ежегодные, если совпал месяц и день
                             DbEvent.annual_month.in_(months),
@@ -326,7 +333,10 @@ class DBController:
                         _calculated_date = start_nearest_date + timedelta(days=_date)
                         if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
                             continue
-                        if event.monthly == _calculated_date.day:
+                        effective_day = self.get_effective_month_day(
+                            _calculated_date.year, _calculated_date.month, event.monthly
+                        )
+                        if _calculated_date.day == effective_day:
                             event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
                             break
                 elif event.annual_day is not None:
@@ -359,6 +369,11 @@ class DBController:
 
     @staticmethod
     async def get_current_day_events_all_users(event_date: date, event_time: time, session: AsyncSession) -> list:
+        last_day = monthrange(event_date.year, event_date.month)[1]
+        monthly_clause = DbEvent.monthly == event_date.day
+        if event_date.day == last_day:
+            monthly_clause = or_(monthly_clause, DbEvent.monthly > last_day)
+
         logger.info(f"events for day from db: {event_date}, week: {event_date.weekday()}")
         logger.info(f"INCOME DATETIME: {event_date}, {event_time}")
 
@@ -371,7 +386,7 @@ class DBController:
                     and_(DbEvent.single_event.is_(True), DbEvent.event_date_pickup == event_date),
                     DbEvent.daily.is_(True),  # Все ежедневные события
                     DbEvent.weekly == event_date.weekday(),  # Все еженедельные события
-                    DbEvent.monthly == event_date.day,  # Все ежемесячные события, если совпал день
+                    monthly_clause,  # Все ежемесячные события, если совпал день
                     and_(
                         DbEvent.annual_day == event_date.day,  # Все ежегодные, если совпал месяц и день
                         DbEvent.annual_month == event_date.month,
