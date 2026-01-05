@@ -354,7 +354,7 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         formatted_date = f"{day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года"
         deleted_event = await db_controller.delete_event_by_id(event_id=db_id)
 
-        if not deleted_event[0]:  # single event
+        if deleted_event[0]:  # single event
             await query.edit_message_text(text=f"Событие на дату {formatted_date} удалено\n{deleted_event[1]}")
         else:
             await query.edit_message_text(text=f"Повторяющееся событие удалено\n{deleted_event[1]}")

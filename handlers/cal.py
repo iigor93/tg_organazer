@@ -5,7 +5,6 @@ from datetime import date, datetime, timedelta, timezone
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-import config
 from config import MONTH_NAMES
 from database.db_controller import db_controller
 
@@ -79,7 +78,10 @@ async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     logger.info(update)
     user_id = update.effective_chat.id
 
-    today = datetime.now(tz=timezone.utc) + timedelta(hours=config.DEFAULT_TIMEZONE)
+    # today = datetime.now(tz=timezone.utc) + timedelta(hours=config.DEFAULT_TIMEZONE)
+    user_tz = timezone(timedelta(hours=3))
+    today = datetime.now(tz=user_tz)
+    print("*** TODAY for user: ", today)
     # today = дата пользователя с учетом его тайм зоны
 
     reply_markup = await generate_calendar(year=today.year, month=today.month, user_id=user_id)

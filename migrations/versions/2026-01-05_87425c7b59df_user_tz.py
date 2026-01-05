@@ -1,8 +1,8 @@
-"""init
+"""user tz
 
-Revision ID: aee9c4d4e797
+Revision ID: 87425c7b59df
 Revises:
-Create Date: 2026-01-04 00:00:40.683136
+Create Date: 2026-01-05 19:52:14.436110
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'aee9c4d4e797'
+revision: str = '87425c7b59df'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -24,29 +24,30 @@ def upgrade() -> None:
     op.create_table('events',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('description', sa.String(), nullable=False, comment='Описание события'),
-    sa.Column('start_time', sa.Time(), nullable=False, comment='Время начала события'),
-    sa.Column('event_date_pickup', sa.Date(), nullable=False, comment='Выбранная дата на календаре'),
+    sa.Column('start_time', sa.Time(), nullable=False, comment='Время начала события в UTC'),
+    sa.Column('start_at', sa.DateTime(timezone=True), nullable=False, comment='Время начала события в UTC'),
+    sa.Column('stop_at', sa.DateTime(timezone=True), nullable=True, comment='Время окончания события в UTC'),
     sa.Column('single_event', sa.Boolean(), nullable=True, comment='Флаг если событие одиночное'),
     sa.Column('daily', sa.Boolean(), nullable=True, comment='Флаг, если событие ежедневное'),
-    sa.Column('weekly', sa.Integer(), nullable=True, comment='Номер недели, если событие еженедельное'),
-    sa.Column('monthly', sa.Integer(), nullable=True, comment='День, если событие ежемесячное'),
-    sa.Column('annual_day', sa.Integer(), nullable=True, comment='День, если событие ежегодное'),
-    sa.Column('annual_month', sa.Integer(), nullable=True, comment='Месяц, если событие ежегодное'),
-    sa.Column('stop_time', sa.Time(), nullable=True, comment='Время окончания события'),
+    sa.Column('weekly', sa.Integer(), nullable=True, comment='Номер недели, если событие еженедельное, UTC'),
+    sa.Column('monthly', sa.Integer(), nullable=True, comment='День, если событие ежемесячное, UTC'),
+    sa.Column('annual_day', sa.Integer(), nullable=True, comment='День, если событие ежегодное, UTC'),
+    sa.Column('annual_month', sa.Integer(), nullable=True, comment='Месяц, если событие ежегодное, UTC'),
     sa.Column('tg_id', sa.Integer(), nullable=False, comment='Юзер тг id, кому принадлежит событие'),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_events_id'), 'events', ['id'], unique=False)
     op.create_table('tg_users',
-    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-    sa.Column('tg_id', sa.Integer(), nullable=False),
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('tg_id', sa.BigInteger(), nullable=False),
     sa.Column('is_active', sa.Boolean(), server_default=sa.text('true'), nullable=True, comment='Признак, писал ли пользователь боту'),
     sa.Column('username', sa.String(), nullable=True),
     sa.Column('first_name', sa.String(), nullable=True),
     sa.Column('last_name', sa.String(), nullable=True),
-    sa.Column('time_zone', sa.String(length=50), nullable=True),
+    sa.Column('time_shift', sa.Integer(), nullable=True),
     sa.Column('language_code', sa.String(length=5), nullable=True),
+    sa.Column('is_chat', sa.Boolean(), server_default=sa.text('false'), nullable=True, comment='Признак пользователя или чата'),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
     sa.PrimaryKeyConstraint('id')
