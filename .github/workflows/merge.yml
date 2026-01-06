@@ -15,3 +15,4 @@ jobs:
           type: now
           from_branch: main
           target_branch: Vitaly
+          github_token: ${{ secrets.GITHUB_TOKEN }}
