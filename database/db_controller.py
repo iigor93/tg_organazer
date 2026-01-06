@@ -102,14 +102,12 @@ class DBController:
         new_event = DbEvent(
             description=event.description,
             start_time=start_datetime_tz.time(),
-            # event_date_pickup=start_datetime_tz.date(),
             single_event=True if event.recurrent == Recurrent.never else False,
             daily=True if event.recurrent == Recurrent.daily else False,
             weekly=start_datetime_tz.weekday() if event.recurrent == Recurrent.weekly else None,
             monthly=start_datetime_tz.day if event.recurrent == Recurrent.monthly else None,
             annual_day=start_datetime_tz.day if event.recurrent == Recurrent.annual else None,
             annual_month=start_datetime_tz.month if event.recurrent == Recurrent.annual else None,
-            # stop_time=stop_datetime_tz.time() if stop_datetime_tz else event.stop_time,
             tg_id=event.tg_id,
             start_at=start_datetime_tz,
             stop_at=stop_datetime_tz,
@@ -125,88 +123,6 @@ class DBController:
     def get_weekday_days_in_month(year: int, month: int, weekday: int) -> list[int]:
         _, num_days = monthrange(year, month)
         return [day for day in range(1, num_days + 1) if date(year, month, day).weekday() == weekday]
-
-    # async def get_current_month_events_by_user(self, user_id: int, month: int, year: int) -> dict[int, int]:
-    #     _, num_days = monthrange(year, month)
-    #
-    #     last_day_of_month = date.fromisoformat(f"{year}-{month:02d}-{num_days:02d}")
-    #
-    #     async with AsyncSessionLocal() as session:
-    #         query = select(DbEvent).where(
-    #             DbEvent.tg_id == user_id,
-    #             DbEvent.event_date_pickup <= last_day_of_month,
-    #             or_(
-    #                 and_(
-    #                     DbEvent.single_event.is_(True),
-    #                     extract("year", DbEvent.event_date_pickup) == year,
-    #                     extract("month", DbEvent.event_date_pickup) == month,
-    #                 ),
-    #                 DbEvent.daily.is_(True),  # Все ежедневные события
-    #                 DbEvent.weekly.is_not(None),  # Все еженедельные события
-    #                 DbEvent.monthly.is_not(None),  # Все ежемесячные события
-    #                 DbEvent.annual_month == month,  # Все ежегодные, если совпал месяц
-    #             ),
-    #         )
-    #
-    #         result = (await session.execute(query)).scalars().all()
-    #
-    #         event_dict: dict[int, int | list] = {day: 0 for day in range(1, num_days + 1)}
-    #         event_dict[0] = []  # daily events
-    #
-    #         for event in result:
-    #             if event.single_event is True:
-    #                 event_dict[event.event_date_pickup.day] += 1
-    #             elif event.daily is True:
-    #                 event_dict[0].append(event)
-    #             elif event.monthly is not None:
-    #                 effective_day = self.get_effective_month_day(year, month, event.monthly)
-    #                 _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{effective_day:02d}")
-    #                 if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
-    #                     continue
-    #
-    #                 event_dict[effective_day] += 1
-    #             elif event.annual_day is not None:
-    #                 _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{event.annual_day:02d}")
-    #                 if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
-    #                     continue
-    #                 event_dict[event.annual_day] += 1
-    #             elif event.weekly is not None:
-    #                 _weekdays = self.get_weekday_days_in_month(year=year, month=month, weekday=event.weekly)
-    #                 for _weekday in _weekdays:
-    #                     _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{_weekday:02d}")
-    #                     if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
-    #                         continue
-    #
-    #                     if (
-    #                         _weekday >= event.event_date_pickup.day
-    #                         or date.fromisoformat(f"{year}-{month:02d}-01") > event.event_date_pickup
-    #                     ):
-    #                         try:
-    #                             event_dict[_weekday] += 1
-    #                         except KeyError:
-    #                             event_dict[num_days] += 1
-    #
-    #         if event_dict[0]:
-    #             for daily_event in event_dict[0]:
-    #                 if (
-    #                     daily_event.event_date_pickup.month == month and daily_event.event_date_pickup.year == year
-    #                 ):  # daily for current month
-    #                     for key, val in event_dict.items():
-    #                         if key >= daily_event.event_date_pickup.day:
-    #                             _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{key:02d}")
-    #                             if _calculated_date in [_ev.cancel_date for _ev in daily_event.canceled_events]:
-    #                                 continue
-    #                             event_dict[key] += 1
-    #                 else:
-    #                     for key, val in event_dict.items():
-    #                         if key != 0:
-    #                             _calculated_date = date.fromisoformat(f"{year}-{month:02d}-{key:02d}")
-    #                             if _calculated_date in [_ev.cancel_date for _ev in daily_event.canceled_events]:
-    #                                 continue
-    #
-    #                             event_dict[key] += 1
-    #
-    #         return event_dict
 
     async def get_current_month_events_by_user(self, user_id: int, month: int, year: int, tz_offset_hours: int = 3) -> dict[int, int]:
         _, num_days = monthrange(year, month)
@@ -302,12 +218,7 @@ class DBController:
 
     @staticmethod
     async def get_current_day_events_by_user(
-        user_id: int,
-        month: int,
-        year: int,
-        day: int,
-        tz_offset_hours: int = 3,
-        deleted: bool = False,
+        user_id: int, month: int, year: int, day: int, tz_offset_hours: int = 3, deleted: bool = False
     ) -> str | list:
         user_tz = timezone(timedelta(hours=tz_offset_hours))
         pickup_date_local = date(year, month, day)
@@ -317,9 +228,6 @@ class DBController:
 
         day_start_utc = day_start_local.astimezone(timezone.utc)
         day_end_utc = day_end_local.astimezone(timezone.utc)
-
-        # weekday = pickup_date_local.weekday()
-        # last_day = monthrange(year, month)[1]
 
         async with AsyncSessionLocal() as session:
             query = select(DbEvent).where(
@@ -346,11 +254,11 @@ class DBController:
         event_list = []
 
         def is_canceled(event: DbEvent) -> bool:
-            return pickup_date_local in {_ev.cancel_date for _ev in event.canceled_events}  # todo тут должно быть utc
+            return pickup_date_local in {_ev.cancel_date for _ev in event.canceled_events}
 
         for event in events:
-            # if is_canceled(event):
-            #     continue
+            if is_canceled(event):
+                continue
 
             event_start_local_dt = event.start_at.astimezone(user_tz)
 
@@ -395,78 +303,6 @@ class DBController:
         event_list.sort(key=lambda x: x[0] if isinstance(x, tuple) else x)
 
         return event_list if deleted else "\n".join(event_list)
-
-    # @staticmethod
-    # async def get_current_day_events_by_user(user_id: int, month: int, year: int, day: int, deleted: bool = False) -> str | list:
-    #     last_day = monthrange(year, month)[1]
-    #     monthly_clause = DbEvent.monthly == day
-    #     if day == last_day:
-    #         monthly_clause = or_(monthly_clause, DbEvent.monthly > last_day)
-    #
-    #     pickup_date = date.fromisoformat(f"{year}-{month:02d}-{day:02d}")
-    #     logger.info(f"events for day from db: {pickup_date}, week: {pickup_date.weekday()}")
-    #
-    #     async with AsyncSessionLocal() as session:
-    #         query = (
-    #             select(DbEvent)
-    #             .where(
-    #                 DbEvent.tg_id == user_id,
-    #                 DbEvent.event_date_pickup <= pickup_date,
-    #                 or_(
-    #                     and_(DbEvent.single_event.is_(True), DbEvent.event_date_pickup == pickup_date),
-    #                     DbEvent.daily.is_(True),  # Все ежедневные события
-    #                     DbEvent.weekly == pickup_date.weekday(),  # Все еженедельные события
-    #                     monthly_clause,  # Все ежемесячные события, если совпал день
-    #                     and_(
-    #                         DbEvent.annual_day == day,  # Все ежегодные, если совпал месяц и день
-    #                         DbEvent.annual_month == month,
-    #                     ),
-    #                 ),
-    #             )
-    #             .order_by(DbEvent.start_time)
-    #         )
-    #
-    #         event_list = []
-    #
-    #         result = (await session.execute(query)).scalars().all()
-    #
-    #         if deleted:  # тут выборка для удаления по дню
-    #             for event in result:
-    #                 if pickup_date in [_ev.cancel_date for _ev in event.canceled_events]:
-    #                     continue
-    #                 event_list.append(
-    #                     (
-    #                         f"{event.start_time.strftime('%H:%M')}-"
-    #                         f"{event.stop_time.strftime('%H:%M') if event.stop_time else ''}\n"
-    #                         f"{event.description[:20]}",
-    #                         event.id,
-    #                         event.single_event,
-    #                     )
-    #                 )
-    #             return event_list
-    #         else:
-    #             for event in result:
-    #                 if pickup_date in [_ev.cancel_date for _ev in event.canceled_events]:
-    #                     continue
-    #
-    #                 recurrent = ""
-    #                 if event.single_event:
-    #                     recurrent = "(одиночное)"
-    #                 elif event.daily:
-    #                     recurrent = f"({Recurrent.daily.get_name().lower()})"
-    #                 elif event.weekly:
-    #                     recurrent = f"({Recurrent.weekly.get_name().lower()})"
-    #                 elif event.monthly:
-    #                     recurrent = f"({Recurrent.monthly.get_name().lower()})"
-    #                 elif event.annual_day:
-    #                     recurrent = f"({Recurrent.annual.get_name().lower()})"
-    #
-    #                 event_list.append(
-    #                     f"{event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
-    #                     f" {recurrent} — {event.description}"
-    #                 )
-    #
-    #             return "\n".join(event_list)
 
     @staticmethod
     async def delete_all_events_by_user(user_id: int) -> None:
@@ -659,13 +495,6 @@ class DBController:
             session.add(new_event)
             await session.commit()
             await session.refresh(new_event)
-            #
-            # text = (
-            #     f"Событие добавлено в календарь:"
-            #     f"\n{event.event_date_pickup.day}.{event.event_date_pickup.month:02d}.{event.event_date_pickup.year} "
-            #     f"время {event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
-            #     f"\n{event.description}"
-            # )
 
             return new_event.id
 

@@ -10,7 +10,6 @@ class DbEvent(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     description = Column(String(), nullable=False, comment="Описание события")
     start_time = Column(Time, nullable=False, comment="Время начала события в UTC")
-    # event_date_pickup = Column(Date, nullable=False, comment="Выбранная дата на календаре")
 
     start_at = Column(DateTime(timezone=True), nullable=False, comment="Время начала события в UTC")
     stop_at = Column(DateTime(timezone=True), nullable=True, comment="Время окончания события в UTC")
@@ -21,7 +20,6 @@ class DbEvent(Base):
     monthly = Column(Integer, nullable=True, comment="День, если событие ежемесячное, UTC")
     annual_day = Column(Integer, nullable=True, comment="День, если событие ежегодное, UTC")
     annual_month = Column(Integer, nullable=True, comment="Месяц, если событие ежегодное, UTC")
-    # stop_time = Column(Time, nullable=True, comment="Время окончания события в UTC")
 
     tg_id = Column(Integer, nullable=False, comment="Юзер тг id, кому принадлежит событие")
     canceled_events = relationship("CanceledEvent", back_populates="event", lazy="selectin", uselist=True, cascade="all, delete-orphan")
