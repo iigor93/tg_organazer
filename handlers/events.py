@@ -271,23 +271,24 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text="Добавь пользователей к событию", reply_markup=reply_markup)
     elif data.startswith("create_event_save_to_db"):
         event_id = await db_controller.save_event(event=event)
-        participants_str = "..."
-        if event.participants:
-            participants_str = ""
-            for _user_id, _user_name in event.all_user_participants.items():
-                participants_str += f"\n- {_user_name}" if _user_id in event.participants else ""
-
-        text = (
-            "<b>Событие успешно сохранено!</b>"
-            f"\n\nДата: <b>{event.get_format_date()}</b>"
-            f"\nВремя начала: <b>{event.start_time.strftime('%H:%M') if event.start_time else '...'}</b>"
-            f"\nВремя окончания: <b>{event.stop_time.strftime('%H:%M') if event.stop_time else '...'}</b>"
-            f"\nОписание: <b>{event.description if event.description else '...'}</b>"
-            f"\nПовтор: <b>{event.recurrent.get_name() if event.recurrent else '...'}</b>"
-            f"\nУчастники: <b>{participants_str}</b>"
-        )
         context.user_data.pop("event")
-        await query.edit_message_text(text=text, parse_mode="HTML")
+        year, month, day = event.get_date()
+        events = await db_controller.get_current_day_events_by_user(user_id=user_id, month=month, year=year, day=day)
+        formatted_date = f"{day:02d}.{month:02d}.{year}"
+
+        if events:
+            text = f"Events for <b>{formatted_date}</b>:\n{events}"
+        else:
+            text = f"No events for <b>{formatted_date}</b>"
+
+        from handlers.cal import generate_calendar  # local import to avoid circular dependency
+
+        calendar_markup = await generate_calendar(year=year, month=month, user_id=user_id)
+        action_row = [InlineKeyboardButton("Create event", callback_data=f"create_event_begin_{year}_{month}_{day}")]
+        if events:
+            action_row.append(InlineKeyboardButton("Delete event", callback_data=f"delete_event_{year}_{month}_{day}"))
+        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
         if event.participants:
             bot = telegram.Bot(token=TOKEN)
