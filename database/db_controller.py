@@ -222,6 +222,8 @@ class DBController:
     ) -> str | list:
         user_tz = timezone(timedelta(hours=tz_offset_hours))
         pickup_date_local = date(year, month, day)
+        _, num_days = monthrange(year, month)
+        add_days = 4 if day == num_days else 0
 
         day_start_local = datetime(year, month, day, 0, 0, 0, tzinfo=user_tz)
         day_end_local = datetime(year, month, day, 23, 59, 59, tzinfo=user_tz)
@@ -240,7 +242,7 @@ class DBController:
                     ),
                     DbEvent.daily.is_(True),
                     and_(DbEvent.weekly.is_not(None), DbEvent.weekly.in_([day_start_utc.weekday(), day_end_utc.weekday()])),
-                    and_(DbEvent.monthly.is_not(None), DbEvent.monthly.in_([day_start_utc.day, day_end_utc.day])),
+                    and_(DbEvent.monthly.is_not(None), DbEvent.monthly.in_(range(day_start_utc.day, day_end_utc.day + add_days))),
                     and_(
                         DbEvent.annual_day.is_not(None),
                         DbEvent.annual_day.in_([day_start_utc.day, day_end_utc.day]),
@@ -273,7 +275,7 @@ class DBController:
                     continue
                 recurrent = f"({Recurrent.weekly.get_name().lower()})"
             elif event.monthly is not None:
-                if event_start_local_dt.day != day_start_local.day:
+                if event_start_local_dt.day not in range(day_start_local.day, day_start_local.day + add_days):
                     continue
                 recurrent = f"({Recurrent.monthly.get_name().lower()})"
             elif event.annual_day is not None:
