@@ -17,12 +17,11 @@ logger = logging.getLogger(__name__)
 
 async def send_messages():
     bot = telegram.Bot(token=TOKEN)
-    now = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=4)
+    now = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
+    now = now.replace(minute=0, second=0, microsecond=0)
 
     async with AsyncSessionLocal() as session:
-        events = await db_controller.get_current_day_events_all_users(
-            event_date=now.date(), event_time=now.time().replace(second=0, microsecond=0), session=session
-        )
+        events = await db_controller.get_current_day_events_all_users(event_dt=now, session=session)
 
     logger.info(f"*** {events}")
 
@@ -35,4 +34,6 @@ async def send_messages():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S%z", level=logging.INFO)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     asyncio.run(send_messages())
