@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 async def send_messages():
     bot = telegram.Bot(token=TOKEN)
     now = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
-    now = now.replace(minute=0, second=0, microsecond=0)
+    now = now.replace(second=0, microsecond=0)
 
     async with AsyncSessionLocal() as session:
         events = await db_controller.get_current_day_events_all_users(event_dt=now, session=session)

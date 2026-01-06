@@ -365,7 +365,7 @@ class DBController:
                     continue
                 recurrent = f"({Recurrent.weekly.get_name().lower()})"
             elif event.monthly is not None:
-                if event_start_local_dt.day != day_start_local.day or event_start_local_dt.month != day_start_local.month:
+                if event_start_local_dt.day != day_start_local.day:
                     continue
                 recurrent = f"({Recurrent.monthly.get_name().lower()})"
             elif event.annual_day is not None:
