@@ -1,6 +1,6 @@
 import logging
 from calendar import monthrange
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -233,7 +233,7 @@ class DBController:
                             DbEvent.daily.is_(True),
                             DbEvent.weekly.is_not(None),
                             DbEvent.monthly.is_not(None),
-                            DbEvent.annual_month.is_not(None),
+                            and_(DbEvent.annual_month.is_not(None), DbEvent.annual_month.in_([month_start_utc.month, month_end_utc.month])),
                         ),
                     ),
                 ),
@@ -244,16 +244,10 @@ class DBController:
         event_dict: dict[int, int | list] = {day: 0 for day in range(1, num_days + 1)}
         event_dict[0] = []  # для daily
 
-        # -----------------------------
-        # Вспомогательная функция проверки отмены события
-        # -----------------------------
         def is_canceled(ev: DbEvent, d: date) -> bool:
             return d in {_ev.cancel_date for _ev in ev.canceled_events}
 
         for event in events:
-            print("-----------------------------")
-            print("*** EVENT in cal: ", event.__dict__)
-            print("-----------------------------")
             # Локальное время начала события
             start_local_dt = event.start_at.astimezone(user_tz)
             end_local_time = event.stop_at.astimezone(user_tz).time() if event.stop_at else None  # noqa
@@ -318,15 +312,9 @@ class DBController:
         user_tz = timezone(timedelta(hours=tz_offset_hours))
         pickup_date_local = date(year, month, day)
 
-        # ---------------------------------
-        # Границы дня в TZ пользователя
-        # ---------------------------------
         day_start_local = datetime(year, month, day, 0, 0, 0, tzinfo=user_tz)
         day_end_local = datetime(year, month, day, 23, 59, 59, tzinfo=user_tz)
 
-        # ---------------------------------
-        # Перевод в UTC
-        # ---------------------------------
         day_start_utc = day_start_local.astimezone(timezone.utc)
         day_end_utc = day_end_local.astimezone(timezone.utc)
 
@@ -336,37 +324,20 @@ class DBController:
         async with AsyncSessionLocal() as session:
             query = select(DbEvent).where(
                 DbEvent.tg_id == user_id,
+                DbEvent.start_at <= day_end_utc,
                 or_(
                     and_(
                         DbEvent.single_event.is_(True),
                         DbEvent.start_at >= day_start_utc,
-                        DbEvent.start_at <= day_end_utc,
                     ),
-                    # # -----------------------------------------
-                    # # DAILY
-                    # # -----------------------------------------
-                    # DbEvent.daily.is_(True),
-                    #
-                    # # -----------------------------------------
-                    # # WEEKLY
-                    # # -----------------------------------------
-                    # DbEvent.weekly == weekday,
-                    #
-                    # # -----------------------------------------
-                    # # MONTHLY
-                    # # -----------------------------------------
-                    # or_(
-                    #     DbEvent.monthly == day,
-                    #     and_(day == last_day, DbEvent.monthly > last_day),
-                    # ),
-                    #
-                    # # -----------------------------------------
-                    # # ANNUAL
-                    # # -----------------------------------------
-                    # and_(
-                    #     DbEvent.annual_day == day,
-                    #     DbEvent.annual_month == month,
-                    # ),
+                    DbEvent.daily.is_(True),
+                    and_(DbEvent.weekly.is_not(None), DbEvent.weekly.in_([day_start_utc.weekday(), day_end_utc.weekday()])),
+                    and_(DbEvent.monthly.is_not(None), DbEvent.monthly.in_([day_start_utc.day, day_end_utc.day])),
+                    and_(
+                        DbEvent.annual_day.is_not(None),
+                        DbEvent.annual_day.in_([day_start_utc.day, day_end_utc.day]),
+                        DbEvent.annual_month.in_([day_start_utc.month, day_end_utc.month]),
+                    ),
                 ),
             )
 
@@ -381,51 +352,50 @@ class DBController:
             # if is_canceled(event):
             #     continue
 
-            start_local_dt = event.start_at.astimezone(user_tz).time()
+            event_start_local_dt = event.start_at.astimezone(user_tz)
 
-            stop_local_time = None
+            event_stop_local_time = None
             if event.stop_at:
-                stop_local_time = event.stop_at.astimezone(user_tz).time()
+                event_stop_local_time = event.stop_at.astimezone(user_tz).time()
 
-            # ---------------------------------
-            # Формирование вывода
-            # ---------------------------------
+            if event.daily:
+                recurrent = f"({Recurrent.daily.get_name().lower()})"
+            elif event.weekly is not None:
+                if event_start_local_dt.weekday() != day_start_local.weekday():
+                    continue
+                recurrent = f"({Recurrent.weekly.get_name().lower()})"
+            elif event.monthly is not None:
+                if event_start_local_dt.day != day_start_local.day or event_start_local_dt.month != day_start_local.month:
+                    continue
+                recurrent = f"({Recurrent.monthly.get_name().lower()})"
+            elif event.annual_day is not None:
+                if event_start_local_dt.day != day_start_local.day or event_start_local_dt.month != day_start_local.month:
+                    continue
+                recurrent = f"({Recurrent.annual.get_name().lower()})"
+            else:
+                recurrent = ""
+
             if deleted:
                 event_list.append(
                     (
-                        f"{start_local_dt.strftime('%H:%M')}-"
-                        f"{stop_local_time.strftime('%H:%M') if stop_local_time else ''}\n"
+                        f"{event_start_local_dt.time().strftime('%H:%M')}-"
+                        f"{event_stop_local_time.strftime('%H:%M') if event_stop_local_time else ''}\n"
                         f"{event.description[:20]}",
                         event.id,
                         event.single_event,
                     )
                 )
             else:
-                if event.daily:
-                    recurrent = f"({Recurrent.daily.get_name().lower()})"
-                elif event.weekly is not None:
-                    recurrent = f"({Recurrent.weekly.get_name().lower()})"
-                elif event.monthly is not None:
-                    recurrent = f"({Recurrent.monthly.get_name().lower()})"
-                elif event.annual_day is not None:
-                    recurrent = f"({Recurrent.annual.get_name().lower()})"
-                else:
-                    recurrent = ""
-
                 event_list.append(
-                    f"{start_local_dt.strftime('%H:%M')}-"
-                    f"{stop_local_time.strftime('%H:%M') if stop_local_time else ''} "
+                    f"{event_start_local_dt.time().strftime('%H:%M')}-"
+                    f"{event_stop_local_time.strftime('%H:%M') if event_stop_local_time else ''} "
                     f"{recurrent} — {event.description}"
                 )
 
-        # -----------------------------------------
-        # Сортировка по локальному времени
-        # -----------------------------------------
         event_list.sort(key=lambda x: x[0] if isinstance(x, tuple) else x)
 
         return event_list if deleted else "\n".join(event_list)
 
-    #
     # @staticmethod
     # async def get_current_day_events_by_user(user_id: int, month: int, year: int, day: int, deleted: bool = False) -> str | list:
     #     last_day = monthrange(year, month)[1]
@@ -518,41 +488,37 @@ class DBController:
 
             return result.single_event, f"{result.start_at.astimezone(user_tz).time().strftime('%H:%M')} {result.description}"
 
-    @staticmethod
     async def get_nearest_events(
+        self,
         user_id: int,
         tz_offset_hours: int = 3,
     ) -> list:
-        start_dt_utc = datetime.now(timezone.utc)
-        stop_dt_utc = start_dt_utc + timedelta(days=NEAREST_EVENTS_DAYS)
         user_tz = timezone(timedelta(hours=tz_offset_hours))
 
-        print("****")
-        print("****", start_dt_utc)
-        print("****", stop_dt_utc)
-        print("****")
+        start_local = datetime.now(user_tz)
+        stop_local = start_local + timedelta(days=NEAREST_EVENTS_DAYS)
 
-        # for _date in range(0, NEAREST_EVENTS_DAYS):
-        #     _calculated_date = start_nearest_date + timedelta(days=_date)
-        #     days.append(_calculated_date.day)
-        #     months.append(_calculated_date.month)
-        #     years.append(_calculated_date.year)
+        start_dt_utc = start_local.astimezone(timezone.utc)
+        stop_dt_utc = stop_local.astimezone(timezone.utc)
 
         async with AsyncSessionLocal() as session:
             query = (
                 select(DbEvent)
                 .where(
                     DbEvent.tg_id == user_id,
-                    # DbEvent.event_date_pickup <= stop_nearest_date,
+                    DbEvent.start_at <= stop_dt_utc,
                     or_(
                         and_(DbEvent.single_event.is_(True), DbEvent.start_at.between(start_dt_utc, stop_dt_utc)),
-                        # DbEvent.daily.is_(True),  # Все ежедневные события
-                        # DbEvent.weekly.is_not(None),  # Все еженедельные события ТК у нас 10 дней, то любое недельное событие попадает
-                        # DbEvent.monthly.is_not(None),  # Все ежемесячные события, если совпал день
-                        # and_(
-                        #     DbEvent.annual_day.in_(days),  # Все ежегодные, если совпал месяц и день
-                        #     DbEvent.annual_month.in_(months),
-                        # ),
+                        DbEvent.daily.is_(True),  # Все ежедневные события
+                        DbEvent.weekly.is_not(None),  # Все еженедельные события ТК у нас 10 дней, то любое недельное событие попадает
+                        and_(
+                            DbEvent.monthly.is_not(None),  # Все ежемесячные события, если совпал день
+                            DbEvent.monthly.between(start_dt_utc.day, stop_dt_utc.day),
+                        ),
+                        and_(
+                            DbEvent.annual_day.between(start_dt_utc.day, stop_dt_utc.day),
+                            DbEvent.annual_month.in_([start_dt_utc.month, stop_dt_utc.month]),
+                        ),
                     ),
                 )
                 .order_by(DbEvent.start_time)
@@ -563,41 +529,49 @@ class DBController:
             event_list = []
 
             for event in result:
-                if event.single_event is True:
-                    event_list.append({event.start_at.astimezone(user_tz): event.description})
+                _event_start_at_user_tz = event.start_at.astimezone(user_tz)
 
-                # elif event.daily is True:
-                #     for _date in range(0, NEAREST_EVENTS_DAYS):
-                #         _calculated_date = start_nearest_date + timedelta(days=_date)
-                #         if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
-                #             continue
-                #         event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
-                #
-                # elif event.monthly is not None:
-                #     for _date in range(0, NEAREST_EVENTS_DAYS):
-                #         _calculated_date = start_nearest_date + timedelta(days=_date)
-                #         if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
-                #             continue
-                #         effective_day = self.get_effective_month_day(_calculated_date.year, _calculated_date.month, event.monthly)
-                #         if _calculated_date.day == effective_day:
-                #             event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
-                #             break
-                # elif event.annual_day is not None:
-                #     for _date in range(0, NEAREST_EVENTS_DAYS):
-                #         _calculated_date = start_nearest_date + timedelta(days=_date)
-                #         if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
-                #             continue
-                #         if event.annual_day == _calculated_date.day and event.annual_month == _calculated_date.month:
-                #             event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
-                #             break
-                #
-                # elif event.weekly is not None:
-                #     for _date in range(0, NEAREST_EVENTS_DAYS):
-                #         _calculated_date = start_nearest_date + timedelta(days=_date)
-                #         if _calculated_date in [_ev.cancel_date for _ev in event.canceled_events]:
-                #             continue
-                #         if event.weekly == _calculated_date.weekday():
-                #             event_list.append({datetime.combine(_calculated_date, event.start_time): event.description})
+                if event.single_event is True:
+                    event_list.append({_event_start_at_user_tz: event.description})
+
+                elif event.daily is True:
+                    for _date in range(0, NEAREST_EVENTS_DAYS):
+                        _calculated_date = start_local + timedelta(days=_date)
+                        if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
+                            continue
+                        _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time()).astimezone(user_tz)
+                        event_list.append({_combined: event.description})
+
+                elif event.monthly is not None:
+                    for _date in range(0, NEAREST_EVENTS_DAYS):
+                        _calculated_date = start_local + timedelta(days=_date)
+                        if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
+                            continue
+                        effective_day = self.get_effective_month_day(
+                            _calculated_date.year, _calculated_date.month, _event_start_at_user_tz.day
+                        )
+                        if _calculated_date.day == effective_day:
+                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time()).astimezone(user_tz)
+                            event_list.append({_combined: event.description})
+
+                elif event.annual_day is not None:
+                    for _date in range(0, NEAREST_EVENTS_DAYS):
+                        _calculated_date = start_local + timedelta(days=_date)
+                        if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
+                            continue
+                        if _event_start_at_user_tz.day == _calculated_date.day and _event_start_at_user_tz.month == _calculated_date.month:
+                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time()).astimezone(user_tz)
+                            event_list.append({_combined: event.description})
+                            break
+
+                elif event.weekly is not None:
+                    for _date in range(0, NEAREST_EVENTS_DAYS):
+                        _calculated_date = start_local + timedelta(days=_date)
+                        if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
+                            continue
+                        if _event_start_at_user_tz.weekday() == _calculated_date.weekday() and _event_start_at_user_tz < _calculated_date:
+                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time()).astimezone(user_tz)
+                            event_list.append({_combined: event.description})
 
             if event_list:
                 event_list = sorted(event_list, key=lambda d: list(d.keys())[0])
@@ -611,28 +585,28 @@ class DBController:
             await session.commit()
 
     @staticmethod
-    async def get_current_day_events_all_users(event_date: date, event_time: time, session: AsyncSession) -> list:
-        last_day = monthrange(event_date.year, event_date.month)[1]
-        monthly_clause = DbEvent.monthly == event_date.day
-        if event_date.day == last_day:
+    async def get_current_day_events_all_users(event_dt: datetime, session: AsyncSession) -> list:
+        last_day = monthrange(event_dt.year, event_dt.month)[1]
+        monthly_clause = DbEvent.monthly == event_dt.day
+        if event_dt.day == last_day:
             monthly_clause = or_(monthly_clause, DbEvent.monthly > last_day)
 
-        logger.info(f"events for day from db: {event_date}, week: {event_date.weekday()}")
-        logger.info(f"INCOME DATETIME: {event_date}, {event_time}")
+        logger.info(f"events for day from db: {event_dt}, week: {event_dt.weekday()}")
+        logger.info(f"INCOME DATETIME: {event_dt}")
 
         query = (
             select(DbEvent)
             .where(
-                DbEvent.event_date_pickup <= event_date,
-                DbEvent.start_time == event_time,
+                DbEvent.start_at <= event_dt,
+                DbEvent.start_time == event_dt.time(),
                 or_(
-                    and_(DbEvent.single_event.is_(True), DbEvent.event_date_pickup == event_date),
+                    and_(DbEvent.single_event.is_(True), DbEvent.start_at == event_dt),
                     DbEvent.daily.is_(True),  # Все ежедневные события
-                    DbEvent.weekly == event_date.weekday(),  # Все еженедельные события
+                    DbEvent.weekly == event_dt.weekday(),  # Все еженедельные события
                     monthly_clause,  # Все ежемесячные события, если совпал день
                     and_(
-                        DbEvent.annual_day == event_date.day,  # Все ежегодные, если совпал месяц и день
-                        DbEvent.annual_month == event_date.month,
+                        DbEvent.annual_day == event_dt.day,  # Все ежегодные, если совпал месяц и день
+                        DbEvent.annual_month == event_dt.month,
                     ),
                 ),
             )
@@ -645,10 +619,16 @@ class DBController:
         result = (await session.execute(query)).scalars().all()
 
         for event in result:
-            if event_date in [_ev.cancel_date for _ev in event.canceled_events]:
+            if event_dt.date() in [_ev.cancel_date for _ev in event.canceled_events]:
                 continue
 
-            event_list.append({"tg_id": event.tg_id, "start_time": event.start_time, "description": event.description})
+            event_list.append(
+                {
+                    "tg_id": event.tg_id,
+                    "start_time": (event.start_at + timedelta(hours=3)).time(),  # todo тут надо из базы достатвь всех юзеров и их tz
+                    "description": event.description,
+                }
+            )
 
         return event_list
 
