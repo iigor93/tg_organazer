@@ -120,8 +120,8 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
 
         events = await db_controller.get_current_day_events_by_user(user_id=user_id, month=month, year=year, day=int(day))
 
-        reply_btn_create = InlineKeyboardButton("Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}")
-        reply_btn_delete = InlineKeyboardButton("Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}")
+        reply_btn_create = InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}")
+        reply_btn_delete = InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}")
         action_row = [reply_btn_create]
         formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
 

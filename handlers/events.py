@@ -146,7 +146,7 @@ def get_event_constructor(
             show_create_btn = True
 
     formatted_date = f"{day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года"
-    text = f"Создать событие на *{formatted_date}* \n\n\\* \\- поля обязательные для заполнения"
+    text = f"✍️ Создать событие на *{formatted_date}* \n\n\\* \\- поля обязательные для заполнения"
 
     start_btn = InlineKeyboardButton(text=start_time, callback_data=f"create_event_start_{year}_{month}_{day}")
     stop_btn = InlineKeyboardButton(text=stop_time, callback_data=f"create_event_stop_{year}_{month}_{day}")
@@ -277,16 +277,16 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         formatted_date = f"{day:02d}.{month:02d}.{year}"
 
         if events:
-            text = f"Events for <b>{formatted_date}</b>:\n{events}"
+            text = f"Создано новое событие <b>{formatted_date}</b>:\n{events}"
         else:
-            text = f"No events for <b>{formatted_date}</b>"
+            text = f"Нет событий <b>{formatted_date}</b>"
 
         from handlers.cal import generate_calendar  # local import to avoid circular dependency
 
         calendar_markup = await generate_calendar(year=year, month=month, user_id=user_id)
-        action_row = [InlineKeyboardButton("Create event", callback_data=f"create_event_begin_{year}_{month}_{day}")]
+        action_row = [InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}")]
         if events:
-            action_row.append(InlineKeyboardButton("Delete event", callback_data=f"delete_event_{year}_{month}_{day}"))
+            action_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
         reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
@@ -351,25 +351,60 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
     data = query.data
 
     if "_id_" in data:
-        _, _, _, db_id, year, month, day = data.split("_")
-        formatted_date = f"{day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года"
-        deleted_event = await db_controller.delete_event_by_id(event_id=db_id)
+        _, _, _, db_id, year_str, month_str, day_str = data.split("_")
+        year = int(year_str)
+        month = int(month_str)
+        day = int(day_str)
 
-        if deleted_event[0]:  # single event
-            await query.edit_message_text(text=f"Событие на дату {formatted_date} удалено\n{deleted_event[1]}")
+        await db_controller.delete_event_by_id(event_id=db_id)
+
+        events = await db_controller.get_current_day_events_by_user(user_id=user_id, month=month, year=year, day=day)
+        formatted_date = f"{day:02d}.{month:02d}.{year}"
+
+        header = "Удалено одно событие"
+        no_events = "Нет событий"
+
+        if events:
+            text = f"{header}\n\n<b>{formatted_date}</b>\n{events}"
         else:
-            await query.edit_message_text(text=f"Повторяющееся событие удалено\n{deleted_event[1]}")
+            text = f"{header}\n\n<b>{formatted_date}</b>\n{no_events}"
+
+        from handlers.cal import generate_calendar  # local import to avoid circular dependency
+
+        calendar_markup = await generate_calendar(year=year, month=month, user_id=user_id)
+        action_row = [InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}") ]
+        if events:
+            action_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
+        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
         return
 
-    elif "_recurDay_" in data:  # удаление повторяющегося события на конкретную дату
-        _, _, _, db_id, year, month, day = data.split("_")
-        year = int(year)
-        month = int(month)
-        day = int(day)
+    elif "_recurDay_" in data:
+        _, _, _, db_id, year_str, month_str, day_str = data.split("_")
+        year = int(year_str)
+        month = int(month_str)
+        day = int(day_str)
         await db_controller.create_cancel_event(event_id=int(db_id), cancel_date=date.fromisoformat(f"{year}-{month:02d}-{day:02d}"))
 
-        formatted_date = f"{day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года"
-        await query.edit_message_text(text=f"Событие на дату {formatted_date} удалено", parse_mode="HTML")
+        events = await db_controller.get_current_day_events_by_user(user_id=user_id, month=month, year=year, day=day)
+        formatted_date = f"{day:02d}.{month:02d}.{year}"
+
+        header = "Удалено одно событие"
+        no_events = "Нет событий"
+
+        if events:
+            text = f"{header}\n\n<b>{formatted_date}</b>\n{events}"
+        else:
+            text = f"{header}\n\n<b>{formatted_date}</b>\n{no_events}"
+
+        from handlers.cal import generate_calendar  # local import to avoid circular dependency
+
+        calendar_markup = await generate_calendar(year=year, month=month, user_id=user_id)
+        action_row = [InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}") ]
+        if events:
+            action_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
+        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif "_recurrent_" in data:
         _, _, _, db_id, year, month, day = data.split("_")
@@ -381,11 +416,11 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
             [
                 [
                     InlineKeyboardButton(
-                        f"Удалить на дату {day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года",
+                        f"🗑 Удалить на дату {day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года",
                         callback_data=f"delete_event_recurDay_{db_id}_{year}_{month}_{day}",
                     )
                 ],
-                [InlineKeyboardButton("Удалить полностью", callback_data=f"delete_event_id_{db_id}_{year}_{month}_{day}")],
+                [InlineKeyboardButton("🗑 Удалить полностью", callback_data=f"delete_event_id_{db_id}_{year}_{month}_{day}")],
                 [InlineKeyboardButton("Отмена", callback_data=f"cal_select_{year}_{month}_{day}")],
             ]
         )
