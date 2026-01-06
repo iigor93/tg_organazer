@@ -23,3 +23,5 @@ else:
     DB_PORT = os.getenv("DB_PORT")
     DB_NAME = os.getenv("DB_NAME")
     database_url = f"postgresql+asyncpg://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+DEFAULT_TIMEZONE: int = 3  # +3 MSK
