@@ -122,16 +122,17 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
 
         reply_btn_create = InlineKeyboardButton("Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}")
         reply_btn_delete = InlineKeyboardButton("Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}")
-        _btn = [reply_btn_create]
+        action_row = [reply_btn_create]
         formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
 
         if events:
-            _btn.append(reply_btn_delete)
+            action_row.append(reply_btn_delete)
             _events = f"📅 События на <b>{formatted_date}</b>:\n{events}"
         else:
             _events = f"📅 Вы выбрали дату: <b>{formatted_date}</b>"
 
-        reply_markup = InlineKeyboardMarkup([_btn])
+        calendar_markup = await generate_calendar(year=year, month=month, user_id=user_id)
+        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
         await query.edit_message_text(text=_events, reply_markup=reply_markup, parse_mode="HTML")
 
     elif data == "cal_ignore":

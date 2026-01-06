@@ -547,6 +547,7 @@ class DBController:
                         _calculated_date = start_local + timedelta(days=_date)
                         if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
                             continue
+
                         effective_day = self.get_effective_month_day(
                             _calculated_date.year, _calculated_date.month, _event_start_at_user_tz.day
                         )
