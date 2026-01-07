@@ -13,7 +13,7 @@ from database.session import Base
 
 @pytest.fixture
 async def db_session_fixture(tmp_path, monkeypatch) -> AsyncGenerator[async_sessionmaker[AsyncSession], None]:
-    db_path = tmp_path / "test.db"
+    db_path = ":memory:"
     test_url = f"sqlite+aiosqlite:///{db_path}"
 
     engine = create_async_engine(test_url, echo=False)
