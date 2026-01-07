@@ -1,0 +1,124 @@
+# tg-organazer
+
+Telegram bot for personal events and reminders with calendar UI, participants, and recurring events.
+
+Русская версия: `README.ru.md`.
+
+## Features
+- Calendar-based event creation and browsing.
+- Start/stop time picker and descriptions.
+- Recurrence: daily, weekly, monthly, annual.
+- Participants and shared events via contacts.
+- Upcoming events list.
+- Background reminder sender (`cron_handler.py`).
+
+## Tech stack
+- Python 3.12
+- python-telegram-bot
+- SQLAlchemy (async) + Alembic
+- PostgreSQL or SQLite (local)
+
+## Project structure
+- `main.py` - bot entry point and handlers registration.
+- `handlers/` - Telegram handlers (calendar, events, contacts, start).
+- `database/` - async DB session and controller.
+- `entities.py` - Pydantic models for event/user entities.
+- `cron_handler.py` - scheduled reminders.
+- `migrations/` - Alembic migrations.
+
+## Requirements
+- Python 3.12
+- Telegram bot token from @BotFather
+- Database (PostgreSQL recommended for production)
+
+## Environment variables
+Create a `.env` file in the project root:
+
+```env
+TG_BOT_TOKEN=your_telegram_bot_token
+
+# Use SQLite locally
+LOCAL=1
+
+# Or use PostgreSQL in production
+# DB_USERNAME=postgres
+# DB_PASSWORD=secret
+# DB_HOST=localhost
+# DB_PORT=5432
+# DB_NAME=tg_organazer
+```
+
+Notes:
+- When `LOCAL` is set, SQLite is used (`sqlite+aiosqlite:///bot.db`).
+- Otherwise, PostgreSQL credentials are required.
+
+## Installation
+Create and activate a virtual environment:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+Install dependencies from `pyproject.toml`:
+
+```powershell
+python -m pip install .
+```
+
+## Database setup
+Run migrations:
+
+```powershell
+alembic upgrade head
+```
+
+For local SQLite, the database file `bot.db` will be created automatically.
+
+## Running the bot
+
+```powershell
+python main.py
+```
+
+## Running scheduled reminders
+This script finds events for the current time and sends reminders:
+
+```powershell
+python cron_handler.py
+```
+
+Use Task Scheduler or any cron equivalent to run it periodically.
+
+## Testing
+Install test dependencies in the active environment:
+
+```powershell
+python -m pip install pytest pytest-asyncio
+```
+
+Run tests:
+
+```powershell
+python -m pytest -q
+```
+
+## Usage examples
+Start the bot and create an event through the calendar:
+- Open the bot in Telegram.
+- Choose "Calendar" from the keyboard.
+- Select a date, set time and description.
+- Save and verify it appears on the selected day.
+
+Add a participant:
+- Share a contact in the chat.
+- Create an event and select participants from the list.
+- Participant receives a notification with a cancellation button.
+
+## Development notes
+- Default timezone offset is `DEFAULT_TIMEZONE = 3` (MSK).
+- Time is stored in UTC in the database.
+- For recurring events, the controller expands the occurrence list on demand.
+
+## License
+Specify your license here.
