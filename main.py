@@ -10,7 +10,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-#ghbdtnggg
+
 from config import TOKEN
 from database.session import engine
 from handlers.cal import handle_calendar_callback, show_calendar
