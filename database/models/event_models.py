@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Time, func
+from sqlalchemy import BigInteger, Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Time, func
 from sqlalchemy.orm import relationship
 
 from database.session import Base
@@ -21,7 +21,7 @@ class DbEvent(Base):
     annual_day = Column(Integer, nullable=True, comment="День, если событие ежегодное, UTC")
     annual_month = Column(Integer, nullable=True, comment="Месяц, если событие ежегодное, UTC")
 
-    tg_id = Column(Integer, nullable=False, comment="Юзер тг id, кому принадлежит событие")
+    tg_id = Column(BigInteger, nullable=False, comment="Юзер тг id, кому принадлежит событие")
     canceled_events = relationship("CanceledEvent", back_populates="event", lazy="selectin", uselist=True, cascade="all, delete-orphan")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
