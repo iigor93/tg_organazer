@@ -58,3 +58,4 @@ class TgUser(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     language_code: str | None = None
+    time_zone: str | None = None
