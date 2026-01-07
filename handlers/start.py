@@ -1,14 +1,15 @@
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from telegram import KeyboardButton, Message, ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes
+from timezonefinder import TimezoneFinder
 
 from database.db_controller import db_controller
 from entities import TgUser
 
 logger = logging.getLogger(__name__)
-
-# from models import User
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -21,14 +22,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     logger.info(f"*** DB user: {db_user}")
 
-    # user_state.get(user.id)
-    # if not user_state:
-    #     user_state[user.id] = User(telegram_id=user.id)
+    keyboard = [[KeyboardButton("⏭ Пропустить")]]
 
-    keyboard = [
-        # [KeyboardButton("📍 Поделиться геолокацией", request_location=True)],
-        [KeyboardButton("⏭ Пропустить")]
-    ]
+    if update.effective_chat.type == "private":
+        keyboard.insert(0, [KeyboardButton("📍 Поделиться геолокацией", request_location=True)])
+
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
     await update.message.reply_text(
@@ -43,13 +41,27 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     logger.info("handle_location")
 
     location = update.message.location
-    user = update.effective_user
+    user = update.effective_chat
 
-    # local_user: User = user_state.get(user.id)
-    # local_user.geo_location = f"широта={location.latitude}, долгота={location.longitude}"
+    tg_user = TgUser.model_validate(user)
+
     logger.info(
         f"Пользователь {user.id} ({user.first_name}) поделился геолокацией: " f"широта={location.latitude}, долгота={location.longitude}"
     )
+    tf = TimezoneFinder()
+
+    tz_name = tf.timezone_at(lat=location.latitude, lng=location.longitude)
+    logger.info(f"tz name; {tz_name}")
+    try:
+        now = datetime.now(ZoneInfo(tz_name))
+        offset = now.utcoffset()
+
+        tg_user.time_zone = tz_name
+        await db_controller.save_update_user(tg_user=tg_user)
+        logger.info(f"OFFSET: {offset}, {int(offset.total_seconds()/3600)}, {type(offset)}")
+    except:  # noqa
+        logger.exception("OFFSET ERR: ")
+        pass
 
     await show_main_menu(update.message, add_text="Спасибо за геолокацию!")
 
