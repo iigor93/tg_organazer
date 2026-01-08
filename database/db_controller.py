@@ -483,14 +483,14 @@ class DBController:
             new_event = DbEvent(
                 description=event.description,
                 start_time=event.start_time,
-                event_date_pickup=event.event_date_pickup,
+                start_at=event.start_at,
+                stop_at=event.stop_at,
                 single_event=event.single_event,
                 daily=event.daily,
                 weekly=event.weekly,
                 monthly=event.monthly,
                 annual_day=event.annual_day,
                 annual_month=event.annual_month,
-                stop_time=event.stop_time,
                 tg_id=user_id,
             )
 
