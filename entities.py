@@ -1,7 +1,7 @@
 import datetime
 import enum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from config import MONTH_NAMES
 
@@ -59,3 +59,11 @@ class TgUser(BaseModel):
     last_name: str | None = None
     language_code: str | None = None
     time_zone: str | None = None
+    title: str | None = None
+
+    @model_validator(mode="after")
+    def names(self) -> "TgUser":
+        if self.title:
+            self.username = self.first_name = self.title
+
+        return self

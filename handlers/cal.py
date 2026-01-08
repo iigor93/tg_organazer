@@ -1,12 +1,15 @@
 import logging
 from calendar import monthrange
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+import config
 from config import MONTH_NAMES
 from database.db_controller import db_controller
+from entities import TgUser
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +19,10 @@ def to_superscript(number: int) -> str:
     return str(number).translate(superscript_map)
 
 
-async def generate_calendar(user_id: int, year: int, month: int) -> InlineKeyboardMarkup:
+async def generate_calendar(user_id: int, year: int, month: int, tz_name: str = config.DEFAULT_TIMEZONE_NAME) -> InlineKeyboardMarkup:
     today = date.today()  # это для кнопки СЕГОДНЯ внизу календаря
 
-    event_dict = await db_controller.get_current_month_events_by_user(user_id=user_id, month=month, year=year)
+    event_dict = await db_controller.get_current_month_events_by_user(user_id=user_id, month=month, year=year, tz_name=tz_name)
 
     first_weekday, num_days = monthrange(year, month)
 
@@ -75,16 +78,17 @@ async def generate_calendar(user_id: int, year: int, month: int) -> InlineKeyboa
 
 async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("show_calendar")
-    logger.info(update)
-    user_id = update.effective_chat.id
 
-    # today = datetime.now(tz=timezone.utc) + timedelta(hours=config.DEFAULT_TIMEZONE)
-    user_tz = timezone(timedelta(hours=3))
-    today = datetime.now(tz=user_tz)
-    print("*** TODAY for user: ", today)
-    # today = дата пользователя с учетом его тайм зоны
+    user = update.effective_chat
+    tg_user = TgUser.model_validate(user)
+    db_user = await db_controller.save_update_user(tg_user=tg_user)
+    logger.info(f"*** DB user: {db_user}")
 
-    reply_markup = await generate_calendar(year=today.year, month=today.month, user_id=user_id)
+    # user_tz = timezone(timedelta(hours=3))
+    tz_name = db_user.time_zone if db_user.time_zone else config.DEFAULT_TIMEZONE_NAME
+    today = datetime.now(tz=ZoneInfo(tz_name))
+
+    reply_markup = await generate_calendar(year=today.year, month=today.month, user_id=user.id, tz_name=db_user.time_zone)
 
     await update.message.reply_text(
         "📅 Выберите дату события:",
@@ -98,9 +102,12 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer()
 
+    user = update.effective_chat
+    tg_user = TgUser.model_validate(user)
+    db_user = await db_controller.save_update_user(tg_user=tg_user)
+    logger.info(f"*** DB user: {db_user}")
+
     data = query.data
-    user_id = query.from_user.id
-    # local_user = user_state[user_id]
 
     if data.startswith("cal_nav_"):
         _, _, year_str, month_str = data.split("_")
@@ -108,7 +115,7 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
         month = int(month_str)
 
         # Генерируем новый календарь
-        reply_markup = await generate_calendar(year=year, month=month, user_id=user_id)
+        reply_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
         await query.edit_message_text("📅 Выберите дату события:", reply_markup=reply_markup)
 
     elif data.startswith("cal_select_"):
@@ -118,7 +125,9 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
         month = int(month_str)
         day = day_str
 
-        events = await db_controller.get_current_day_events_by_user(user_id=user_id, month=month, year=year, day=int(day))
+        events = await db_controller.get_current_day_events_by_user(
+            user_id=user.id, month=month, year=year, day=int(day), tz_name=db_user.time_zone
+        )
 
         reply_btn_create = InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}")
         reply_btn_delete = InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}")
@@ -131,7 +140,7 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
         else:
             _events = f"📅 Вы выбрали дату: <b>{formatted_date}</b>"
 
-        calendar_markup = await generate_calendar(year=year, month=month, user_id=user_id)
+        calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
         reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
         await query.edit_message_text(text=_events, reply_markup=reply_markup, parse_mode="HTML")
 

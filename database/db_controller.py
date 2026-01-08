@@ -1,6 +1,7 @@
 import logging
 from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -36,7 +37,7 @@ class DBController:
                 user.is_active = False if from_contact else True
                 session.add(user)
             else:
-                tg_user_dict = tg_user.model_dump()
+                tg_user_dict = tg_user.model_dump(exclude={"title"}, exclude_defaults=True, exclude_unset=True)
                 if from_contact:
                     tg_user_dict.pop("is_active")
                 update_query = update(DB_User).where(DB_User.tg_id == tg_user.tg_id).values(**tg_user_dict).returning(DB_User)
@@ -61,6 +62,7 @@ class DBController:
                     return None
 
         user.id = user.tg_id
+        user.time_zone = config.DEFAULT_TIMEZONE_NAME if not user.time_zone else user.time_zone
         return TgUser.model_validate(user)
 
     @staticmethod
@@ -82,22 +84,16 @@ class DBController:
             return {item.tg_id: item.first_name for item in participants}
 
     @staticmethod
-    async def save_event(event: Event) -> int | None:
+    async def save_event(event: Event, tz_name: str = config.DEFAULT_TIMEZONE_NAME) -> int | None:
         logger.info(f"db_controller save event: {event}")
 
-        start_datetime_tz = (
-            datetime.combine(event.event_date, event.start_time)
-            .replace(tzinfo=timezone(timedelta(hours=config.DEFAULT_TIMEZONE, minutes=0)))
-            .astimezone(timezone.utc)
-        )
+        user_tz = ZoneInfo(tz_name)
+
+        start_datetime_tz = datetime.combine(event.event_date, event.start_time).replace(tzinfo=user_tz).astimezone(timezone.utc)
 
         stop_datetime_tz = None
         if event.stop_time:
-            stop_datetime_tz = (
-                datetime.combine(event.event_date, event.stop_time)
-                .replace(tzinfo=timezone(timedelta(hours=config.DEFAULT_TIMEZONE, minutes=0)))
-                .astimezone(timezone.utc)
-            )
+            stop_datetime_tz = datetime.combine(event.event_date, event.stop_time).replace(tzinfo=user_tz).astimezone(timezone.utc)
 
         new_event = DbEvent(
             description=event.description,
@@ -124,9 +120,12 @@ class DBController:
         _, num_days = monthrange(year, month)
         return [day for day in range(1, num_days + 1) if date(year, month, day).weekday() == weekday]
 
-    async def get_current_month_events_by_user(self, user_id: int, month: int, year: int, tz_offset_hours: int = 3) -> dict[int, int]:
+    async def get_current_month_events_by_user(
+        self, user_id: int, month: int, year: int, tz_name: str = config.DEFAULT_TIMEZONE_NAME
+    ) -> dict[int, int]:
         _, num_days = monthrange(year, month)
-        user_tz = timezone(timedelta(hours=tz_offset_hours))
+
+        user_tz = ZoneInfo(tz_name)
 
         month_start_local = datetime(year, month, 1, 0, 0, 0, tzinfo=user_tz)
         month_end_local = datetime(year, month, num_days, 23, 59, 59, tzinfo=user_tz)
@@ -218,9 +217,9 @@ class DBController:
 
     @staticmethod
     async def get_current_day_events_by_user(
-        user_id: int, month: int, year: int, day: int, tz_offset_hours: int = 3, deleted: bool = False
+        user_id: int, month: int, year: int, day: int, tz_name: str = config.DEFAULT_TIMEZONE_NAME, deleted: bool = False
     ) -> str | list:
-        user_tz = timezone(timedelta(hours=tz_offset_hours))
+        user_tz = ZoneInfo(tz_name)
         pickup_date_local = date(year, month, day)
         _, num_days = monthrange(year, month)
         add_days = 4 if day == num_days else 0
@@ -230,6 +229,8 @@ class DBController:
 
         day_start_utc = day_start_local.astimezone(timezone.utc)
         day_end_utc = day_end_local.astimezone(timezone.utc)
+
+        day_start_for_monthly = 1 if day_start_utc.day > day_end_utc.day else day_start_utc.day
 
         async with AsyncSessionLocal() as session:
             query = select(DbEvent).where(
@@ -242,7 +243,13 @@ class DBController:
                     ),
                     DbEvent.daily.is_(True),
                     and_(DbEvent.weekly.is_not(None), DbEvent.weekly.in_([day_start_utc.weekday(), day_end_utc.weekday()])),
-                    and_(DbEvent.monthly.is_not(None), DbEvent.monthly.in_(range(day_start_utc.day, day_end_utc.day + 1 + add_days))),
+                    and_(
+                        DbEvent.monthly.is_not(None),
+                        or_(
+                            DbEvent.monthly.in_(range(day_start_for_monthly, day_end_utc.day + 1 + add_days)),
+                            DbEvent.monthly == day_start_utc.day,
+                        ),
+                    ),
                     and_(
                         DbEvent.annual_day.is_not(None),
                         DbEvent.annual_day.in_([day_start_utc.day, day_end_utc.day]),
@@ -316,9 +323,9 @@ class DBController:
     @staticmethod
     async def delete_event_by_id(
         event_id: int | str,
-        tz_offset_hours: int = 3,
+        tz_name: str = config.DEFAULT_TIMEZONE_NAME,
     ) -> tuple:
-        user_tz = timezone(timedelta(hours=tz_offset_hours))
+        user_tz = ZoneInfo(tz_name)
         query = delete(DbEvent).where(DbEvent.id == int(event_id)).returning(DbEvent)
         async with AsyncSessionLocal() as session:
             result = (await session.execute(query)).scalar_one_or_none()
@@ -329,9 +336,9 @@ class DBController:
     async def get_nearest_events(
         self,
         user_id: int,
-        tz_offset_hours: int = 3,
+        tz_name: str = config.DEFAULT_TIMEZONE_NAME,
     ) -> list:
-        user_tz = timezone(timedelta(hours=tz_offset_hours))
+        user_tz = ZoneInfo(tz_name)
 
         start_local = datetime.now(user_tz)
         stop_local = start_local + timedelta(days=NEAREST_EVENTS_DAYS)
