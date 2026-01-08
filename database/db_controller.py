@@ -464,6 +464,19 @@ class DBController:
 
         result = (await session.execute(query)).scalars().all()
 
+        users_query = select(DB_User).where(DB_User.tg_id.in_([event.tg_id for event in result]))
+        users = (await session.execute(users_query)).scalars().all()
+
+        users_dict = {}
+
+        dt_aware_default = datetime.now(ZoneInfo(config.DEFAULT_TIMEZONE_NAME)).utcoffset()
+
+        for _user in users:
+            tz = ZoneInfo(_user.time_zone) if _user.time_zone else ZoneInfo(config.DEFAULT_TIMEZONE_NAME)
+            dt_aware = datetime.now(tz)
+
+            users_dict[_user.tg_id] = dt_aware.utcoffset()
+
         for event in result:
             if event_dt.date() in [_ev.cancel_date for _ev in event.canceled_events]:
                 continue
@@ -471,7 +484,7 @@ class DBController:
             event_list.append(
                 {
                     "tg_id": event.tg_id,
-                    "start_time": (event.start_at + timedelta(hours=3)).time(),  # todo тут надо из базы достатвь всех юзеров и их tz
+                    "start_time": (event.start_at + users_dict.get(event.tg_id, dt_aware_default)).time(),
                     "description": event.description,
                 }
             )
