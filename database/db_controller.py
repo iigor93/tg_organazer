@@ -84,22 +84,16 @@ class DBController:
             return {item.tg_id: item.first_name for item in participants}
 
     @staticmethod
-    async def save_event(event: Event) -> int | None:
+    async def save_event(event: Event, tz_name: str = config.DEFAULT_TIMEZONE_NAME) -> int | None:
         logger.info(f"db_controller save event: {event}")
 
-        start_datetime_tz = (
-            datetime.combine(event.event_date, event.start_time)
-            .replace(tzinfo=timezone(timedelta(hours=config.DEFAULT_TIMEZONE, minutes=0)))
-            .astimezone(timezone.utc)
-        )
+        user_tz = ZoneInfo(tz_name)
+
+        start_datetime_tz = datetime.combine(event.event_date, event.start_time).replace(tzinfo=user_tz).astimezone(timezone.utc)
 
         stop_datetime_tz = None
         if event.stop_time:
-            stop_datetime_tz = (
-                datetime.combine(event.event_date, event.stop_time)
-                .replace(tzinfo=timezone(timedelta(hours=config.DEFAULT_TIMEZONE, minutes=0)))
-                .astimezone(timezone.utc)
-            )
+            stop_datetime_tz = datetime.combine(event.event_date, event.stop_time).replace(tzinfo=user_tz).astimezone(timezone.utc)
 
         new_event = DbEvent(
             description=event.description,

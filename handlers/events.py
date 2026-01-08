@@ -274,7 +274,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         reply_markup = InlineKeyboardMarkup(list_btn)
         await query.edit_message_text(text="Добавь пользователей к событию", reply_markup=reply_markup)
     elif data.startswith("create_event_save_to_db"):
-        event_id = await db_controller.save_event(event=event)
+        event_id = await db_controller.save_event(event=event, tz_name=db_user.time_zone)
         context.user_data.pop("event")
         year, month, day = event.get_date()
         events = await db_controller.get_current_day_events_by_user(
