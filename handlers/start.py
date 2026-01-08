@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("start")
 
-    # user = update.effective_user
     user = update.effective_chat
     tg_user = TgUser.model_validate(user)
     db_user = await db_controller.save_update_user(tg_user=tg_user)
@@ -41,9 +40,11 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     logger.info("handle_location")
 
     location = update.message.location
-    user = update.effective_chat
 
+    user = update.effective_chat
     tg_user = TgUser.model_validate(user)
+    db_user = await db_controller.save_update_user(tg_user=tg_user)
+    logger.info(f"*** DB user: {db_user}")
 
     logger.info(
         f"Пользователь {user.id} ({user.first_name}) поделился геолокацией: " f"широта={location.latitude}, долгота={location.longitude}"

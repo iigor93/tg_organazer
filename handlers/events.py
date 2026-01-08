@@ -8,7 +8,7 @@ from telegram.ext import ContextTypes
 
 from config import MONTH_NAMES, TOKEN
 from database.db_controller import db_controller
-from entities import Event, Recurrent
+from entities import Event, Recurrent, TgUser
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,11 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
     query = update.callback_query
     await query.answer()
     data = query.data
-    user_id = update.effective_user.id
+
+    user = update.effective_chat
+    tg_user = TgUser.model_validate(user)
+    db_user = await db_controller.save_update_user(tg_user=tg_user)
+    logger.info(f"*** DB user: {db_user}")
 
     event: Event | None = context.user_data.get("event")
     if not event:
@@ -191,7 +195,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         except:  # noqa
             ...
 
-        participants: dict[int, str] = await db_controller.get_participants(tg_id=user_id)
+        participants: dict[int, str] = await db_controller.get_participants(tg_id=user.id)
         context.user_data["event"].all_user_participants = participants
 
         has_participants = bool(event.all_user_participants)
@@ -273,7 +277,9 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         event_id = await db_controller.save_event(event=event)
         context.user_data.pop("event")
         year, month, day = event.get_date()
-        events = await db_controller.get_current_day_events_by_user(user_id=user_id, month=month, year=year, day=day)
+        events = await db_controller.get_current_day_events_by_user(
+            user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
+        )
         formatted_date = f"{day:02d}.{month:02d}.{year}"
 
         if events:
@@ -283,7 +289,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
         from handlers.cal import generate_calendar  # local import to avoid circular dependency
 
-        calendar_markup = await generate_calendar(year=year, month=month, user_id=user_id)
+        calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
         action_row = [InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}")]
         if events:
             action_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
@@ -307,30 +313,15 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
                 await bot.send_message(chat_id=user, text=text, reply_markup=reply_markup)
 
 
-# async def send_event_to_participants(event_creator: str, event: Event, event_id: int, participants: list[int]) -> None:
-#
-#     text = (
-#         f"{str(event_creator).title()} добавил событие"
-#         f"\n{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year} "
-#         f"время {event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
-#         f"\n{event.description}"
-#     )
-#
-#     btn = [
-#         [InlineKeyboardButton("Добавить в мой календарь", callback_data=f"create_participant_event_{event_id}")],
-#         [InlineKeyboardButton("Не добавлять", callback_data="create_participant_event_cancel")],
-#     ]
-#
-#     reply_markup = InlineKeyboardMarkup(btn)
-#     bot = telegram.Bot(token=TOKEN)
-#     for user in participants:
-#         await bot.send_message(chat_id=user, text=text, reply_markup=reply_markup)
-
-
 async def show_upcoming_events(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("show_upcoming_events")
-    user_id = update.effective_user.id
-    events = await db_controller.get_nearest_events(user_id=user_id)
+
+    user = update.effective_chat
+    tg_user = TgUser.model_validate(user)
+    db_user = await db_controller.save_update_user(tg_user=tg_user)
+    logger.info(f"*** DB user: {db_user}")
+
+    events = await db_controller.get_nearest_events(user_id=user.id, tz_name=db_user.time_zone)
 
     if events:
         list_events = ["Ближайшие события:"]
@@ -347,7 +338,12 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
     logger.info("handle_delete_event_callback")
     query = update.callback_query
     await query.answer()
-    user_id = update.effective_user.id
+
+    user = update.effective_chat
+    tg_user = TgUser.model_validate(user)
+    db_user = await db_controller.save_update_user(tg_user=tg_user)
+    logger.info(f"*** DB user: {db_user}")
+    # user_id = update.effective_user.id
     data = query.data
 
     if "_id_" in data:
@@ -356,9 +352,11 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         month = int(month_str)
         day = int(day_str)
 
-        await db_controller.delete_event_by_id(event_id=db_id)
+        await db_controller.delete_event_by_id(event_id=db_id, tz_name=db_user.time_zone)
 
-        events = await db_controller.get_current_day_events_by_user(user_id=user_id, month=month, year=year, day=day)
+        events = await db_controller.get_current_day_events_by_user(
+            user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
+        )
         formatted_date = f"{day:02d}.{month:02d}.{year}"
 
         header = "Удалено одно событие"
@@ -371,8 +369,8 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
 
         from handlers.cal import generate_calendar  # local import to avoid circular dependency
 
-        calendar_markup = await generate_calendar(year=year, month=month, user_id=user_id)
-        action_row = [InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}") ]
+        calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
+        action_row = [InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}")]
         if events:
             action_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
         reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
@@ -386,7 +384,9 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         day = int(day_str)
         await db_controller.create_cancel_event(event_id=int(db_id), cancel_date=date.fromisoformat(f"{year}-{month:02d}-{day:02d}"))
 
-        events = await db_controller.get_current_day_events_by_user(user_id=user_id, month=month, year=year, day=day)
+        events = await db_controller.get_current_day_events_by_user(
+            user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
+        )
         formatted_date = f"{day:02d}.{month:02d}.{year}"
 
         header = "Удалено одно событие"
@@ -399,8 +399,8 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
 
         from handlers.cal import generate_calendar  # local import to avoid circular dependency
 
-        calendar_markup = await generate_calendar(year=year, month=month, user_id=user_id)
-        action_row = [InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}") ]
+        calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
+        action_row = [InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}")]
         if events:
             action_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
         reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
@@ -433,7 +433,9 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         month = int(month)
         day = int(day)
 
-        events = await db_controller.get_current_day_events_by_user(user_id=user_id, month=month, year=year, day=day, deleted=True)
+        events = await db_controller.get_current_day_events_by_user(
+            user_id=user.id, month=month, year=year, day=day, deleted=True, tz_name=db_user.time_zone
+        )
 
         formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
         text = f"<b>{formatted_date}</b>\nВыберете события для удаления:"
@@ -458,8 +460,13 @@ async def handle_event_participants_callback(update: Update, context: ContextTyp
     query = update.callback_query
     data = query.data
 
+    user = update.effective_chat
+    tg_user = TgUser.model_validate(user)
+    db_user = await db_controller.save_update_user(tg_user=tg_user)
+    logger.info(f"*** DB user: {db_user}")
+
     if "cancel" in data:
         _, _, _, _, event_id = data.split("_")
-        await db_controller.delete_event_by_id(event_id=event_id)
+        await db_controller.delete_event_by_id(event_id=event_id, tz_name=db_user.time_zone)
         await query.edit_message_text(text="Событие не добавлено в календарь")
         return

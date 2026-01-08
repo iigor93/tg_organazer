@@ -25,3 +25,4 @@ else:
     database_url = f"postgresql+asyncpg://{DB_USERNAME}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
 DEFAULT_TIMEZONE: int = 3  # +3 MSK
+DEFAULT_TIMEZONE_NAME: str = "Europe/Moscow"  # +3 MSK
