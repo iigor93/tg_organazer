@@ -26,3 +26,5 @@ else:
 
 DEFAULT_TIMEZONE: int = 3  # +3 MSK
 DEFAULT_TIMEZONE_NAME: str = "Europe/Moscow"  # +3 MSK
+
+SERVICE_ACCOUNTS: str = os.getenv("SERVICE_ACCOUNTS", None)
