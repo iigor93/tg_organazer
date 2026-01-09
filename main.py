@@ -10,8 +10,9 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+
 # ggg
-from config import TOKEN
+from config import SERVICE_ACCOUNTS, TOKEN
 from database.session import engine
 from handlers.cal import handle_calendar_callback, show_calendar
 from handlers.contacts import handle_contact
@@ -63,6 +64,12 @@ async def all_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def set_commands(app):
     await app.bot.set_my_commands([BotCommand("start", "Запустить бота")])
+    if SERVICE_ACCOUNTS:
+        try:
+            for service_account in SERVICE_ACCOUNTS.split(";"):
+                await app.bot.send_message(chat_id=service_account, text="App started")
+        except:  # noqa
+            logger.exception("err ")
 
 
 async def shutdown(app):
