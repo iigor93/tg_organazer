@@ -1,6 +1,6 @@
 import logging
 from calendar import monthrange
-from datetime import date, datetime
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -20,8 +20,6 @@ def to_superscript(number: int) -> str:
 
 
 async def generate_calendar(user_id: int, year: int, month: int, tz_name: str = config.DEFAULT_TIMEZONE_NAME) -> InlineKeyboardMarkup:
-    today = date.today()  # это для кнопки СЕГОДНЯ внизу календаря
-
     event_dict = await db_controller.get_current_month_events_by_user(user_id=user_id, month=month, year=year, tz_name=tz_name)
 
     first_weekday, num_days = monthrange(year, month)
@@ -65,14 +63,6 @@ async def generate_calendar(user_id: int, year: int, month: int, tz_name: str = 
             week.append(InlineKeyboardButton(" ", callback_data="cal_ignore"))
         keyboard.append(week)
 
-    keyboard.append(
-        [
-            InlineKeyboardButton(
-                f"Сегодня {today.day}.{today.month}.{today.year}", callback_data=f"cal_select_{today.year}_{today.month}_{today.day}"
-            )
-        ]
-    )
-
     return InlineKeyboardMarkup(keyboard)
 
 
@@ -89,6 +79,18 @@ async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     today = datetime.now(tz=ZoneInfo(tz_name))
 
     reply_markup = await generate_calendar(year=today.year, month=today.month, user_id=user.id, tz_name=db_user.time_zone)
+
+    keyboard = list(reply_markup.inline_keyboard)
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                f"✍️ Создать событие на {today.day:02d}.{today.month:02d}.{today.year}",
+                callback_data=f"cal_select_{today.year}_{today.month}_{today.day}",
+            )
+        ]
+    )
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
         "📅 Выберите дату события:",
@@ -129,19 +131,22 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
             user_id=user.id, month=month, year=year, day=int(day), tz_name=db_user.time_zone
         )
 
-        reply_btn_create = InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}")
+        reply_btn_create = InlineKeyboardButton(
+            f"✍️ Создать событие на {int(day):02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
+        )
         reply_btn_delete = InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}")
         action_row = [reply_btn_create]
         formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
 
+        delete_row = []
         if events:
-            action_row.append(reply_btn_delete)
+            delete_row.append(reply_btn_delete)
             _events = f"📅 События на <b>{formatted_date}</b>:\n{events}"
         else:
             _events = f"📅 Вы выбрали дату: <b>{formatted_date}</b>"
 
         calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
+        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row] + [delete_row])
         await query.edit_message_text(text=_events, reply_markup=reply_markup, parse_mode="HTML")
 
     elif data == "cal_ignore":
