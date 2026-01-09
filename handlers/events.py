@@ -45,6 +45,9 @@ async def handle_participants_callback(update: Update, context: ContextTypes.DEF
     event: Event | None = context.user_data.get("event")
 
     tg_id_income = int(query.data.split("_")[1])
+    is_active = context.user_data.get("participants_status", {}).get(tg_id_income, True)
+    if not is_active:
+        return
 
     if tg_id_income in event.participants:
         event.participants.remove(tg_id_income)
@@ -55,10 +58,11 @@ async def handle_participants_callback(update: Update, context: ContextTypes.DEF
 
     list_btn = []
     for tg_id, name in event.all_user_participants.items():
-        if tg_id in event.participants:
+        is_active = context.user_data.get("participants_status", {}).get(tg_id, True)
+        if not is_active:
+            name = f"{name} (не в боте)"
+        elif tg_id in event.participants:
             name = f"{name} ✅"
-        else:
-            name = name
         list_btn.append([InlineKeyboardButton(name, callback_data=f"participants_{tg_id}")])
 
     list_btn.append([InlineKeyboardButton("✅ OK", callback_data="create_event_begin_")])
@@ -195,8 +199,9 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         except:  # noqa
             ...
 
-        participants: dict[int, str] = await db_controller.get_participants(tg_id=user.id)
-        context.user_data["event"].all_user_participants = participants
+        participants = await db_controller.get_participants_with_status(tg_id=user.id, include_inactive=True)
+        context.user_data["participants_status"] = {tg_id: is_active for tg_id, (_, is_active) in participants.items()}
+        context.user_data["event"].all_user_participants = {tg_id: name for tg_id, (name, _) in participants.items()}
 
         has_participants = bool(event.all_user_participants)
         text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants)
@@ -265,7 +270,10 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
     elif data.startswith("create_event_participants_"):
         list_btn = []
         for tg_id, name in event.all_user_participants.items():
-            if tg_id in event.participants:
+            is_active = context.user_data.get("participants_status", {}).get(tg_id, True)
+            if not is_active:
+                name = f"{name} (не в боте)"
+            elif tg_id in event.participants:
                 name = f"{name} ✅"
             list_btn.append([InlineKeyboardButton(name, callback_data=f"participants_{tg_id}")])
 

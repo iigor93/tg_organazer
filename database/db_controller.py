@@ -33,13 +33,16 @@ class DBController:
             result = (await session.execute(query)).scalar_one_or_none()
 
             if not result:
-                user = DB_User(**tg_user.model_dump())
+                tg_user_dict = tg_user.model_dump(exclude={"title"}, exclude_defaults=True, exclude_unset=True)
+                user = DB_User(**tg_user_dict)
                 user.is_active = False if from_contact else True
                 session.add(user)
             else:
                 tg_user_dict = tg_user.model_dump(exclude={"title"}, exclude_defaults=True, exclude_unset=True)
                 if from_contact:
-                    tg_user_dict.pop("is_active")
+                    tg_user_dict.pop("is_active", None)
+                else:
+                    tg_user_dict["is_active"] = True
                 update_query = update(DB_User).where(DB_User.tg_id == tg_user.tg_id).values(**tg_user_dict).returning(DB_User)
                 user = (await session.execute(update_query)).scalar_one_or_none()
 
@@ -69,19 +72,68 @@ class DBController:
     async def get_user(tg_id: int) -> dict | None: ...
 
     @staticmethod
-    async def get_participants(tg_id: int) -> dict[int, str] | None:
+    async def get_participants(tg_id: int, include_inactive: bool = False) -> dict[int, str] | None:
         async with AsyncSessionLocal() as session:
             db_user_alias = aliased(DB_User)
+            filters = [db_user_alias.tg_id == tg_id]
+            if not include_inactive:
+                filters.append(DB_User.is_active.is_(True))
             query = (
                 select(DB_User)
                 .join(UserRelation, DB_User.id == UserRelation.related_user_id)
                 .join(db_user_alias, UserRelation.user_id == db_user_alias.id)
-                .where(db_user_alias.tg_id == tg_id, DB_User.is_active.is_(True))
+                .where(*filters)
             )
 
             participants = (await session.execute(query)).scalars().all()
 
             return {item.tg_id: item.first_name for item in participants}
+
+    @staticmethod
+    async def get_participants_with_status(tg_id: int, include_inactive: bool = True) -> dict[int, tuple[str, bool]]:
+        async with AsyncSessionLocal() as session:
+            db_user_alias = aliased(DB_User)
+            filters = [db_user_alias.tg_id == tg_id]
+            if not include_inactive:
+                filters.append(DB_User.is_active.is_(True))
+            query = (
+                select(DB_User)
+                .join(UserRelation, DB_User.id == UserRelation.related_user_id)
+                .join(db_user_alias, UserRelation.user_id == db_user_alias.id)
+                .where(*filters)
+            )
+
+            participants = (await session.execute(query)).scalars().all()
+
+            return {item.tg_id: (item.first_name, bool(item.is_active)) for item in participants}
+
+    @staticmethod
+    async def delete_participants(current_tg_id: int, related_tg_ids: list[int]) -> int:
+        if not related_tg_ids:
+            return 0
+
+        async with AsyncSessionLocal() as session:
+            current_user = (
+                await session.execute(select(DB_User).where(DB_User.tg_id == current_tg_id))
+            ).scalar_one_or_none()
+            if not current_user:
+                return 0
+
+            related_users = (
+                await session.execute(select(DB_User).where(DB_User.tg_id.in_(related_tg_ids)))
+            ).scalars().all()
+            if not related_users:
+                return 0
+
+            related_ids = [user.id for user in related_users]
+            delete_query = delete(UserRelation).where(
+                UserRelation.user_id == current_user.id,
+                UserRelation.related_user_id.in_(related_ids),
+            )
+            result = await session.execute(delete_query)
+            await session.commit()
+
+            return result.rowcount or 0
 
     @staticmethod
     async def save_event(event: Event, tz_name: str = config.DEFAULT_TIMEZONE_NAME) -> int | None:
