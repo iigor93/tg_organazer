@@ -290,10 +290,15 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         from handlers.cal import generate_calendar  # local import to avoid circular dependency
 
         calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        action_row = [InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}")]
+        action_row = [
+            InlineKeyboardButton(
+                f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
+            )
+        ]
+        delete_row = []
         if events:
-            action_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
-        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
+            delete_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
+        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row] + [delete_row])
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
         if event.participants:
@@ -370,10 +375,15 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         from handlers.cal import generate_calendar  # local import to avoid circular dependency
 
         calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        action_row = [InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}")]
+        action_row = [
+            InlineKeyboardButton(
+                f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
+            )
+        ]
+        delete_row = []
         if events:
-            action_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
-        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
+            delete_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
+        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row] + [delete_row])
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
         return
 
@@ -400,10 +410,15 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         from handlers.cal import generate_calendar  # local import to avoid circular dependency
 
         calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        action_row = [InlineKeyboardButton("✍️ Создать событие", callback_data=f"create_event_begin_{year}_{month}_{day}")]
+        action_row = [
+            InlineKeyboardButton(
+                f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
+            )
+        ]
+        delete_row = []
         if events:
-            action_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
-        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
+            delete_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
+        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row] + [delete_row])
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif "_recurrent_" in data:
