@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 def _build_team_keyboard(participants: dict[int, str], selected: set[int]) -> InlineKeyboardMarkup:
     buttons = []
     for tg_id, name in participants.items():
-        prefix = "[x] " if tg_id in selected else "[ ] "
-        buttons.append([InlineKeyboardButton(f"{prefix}{name}", callback_data=f"team_toggle_{tg_id}")])
+        postfix = " ❌" if tg_id in selected else ""
+        buttons.append([InlineKeyboardButton(f"{name}{postfix}", callback_data=f"team_toggle_{tg_id}")])
 
     buttons.append([InlineKeyboardButton("Удалить выбранных", callback_data="team_delete")])
     buttons.append([InlineKeyboardButton("Закрыть", callback_data="team_close")])
