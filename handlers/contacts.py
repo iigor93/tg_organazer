@@ -23,7 +23,7 @@ def _build_team_keyboard(participants: dict[int, str], selected: set[int]) -> In
 
 async def handle_team_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("handle_team_command")
-    user_id = update.effective_user.id
+    user_id = update.effective_chat.id
 
     participants = await db_controller.get_participants(tg_id=user_id, include_inactive=True)
     if not participants:
@@ -45,10 +45,12 @@ async def handle_team_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
 
-    user_id = query.from_user.id
+    user_id = update.effective_chat.id
     data = query.data
 
-    participants = context.user_data.get("team_participants") or await db_controller.get_participants(tg_id=user_id, include_inactive=True) or {}
+    participants = (
+        context.user_data.get("team_participants") or await db_controller.get_participants(tg_id=user_id, include_inactive=True) or {}
+    )
     selected = set(context.user_data.get("team_selected") or [])
 
     if data.startswith("team_toggle_"):
@@ -103,7 +105,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Похоже этот номер не зарегистрирован в телеграмм!")
     elif contact:
         user_id = contact.user_id
-        if user_id == update.effective_user.id:
+        if user_id == update.effective_chat.id:
             await update.message.reply_text("Нельзя добавлять себя")
             return
         first_name = contact.first_name
