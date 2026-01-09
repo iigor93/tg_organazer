@@ -72,7 +72,7 @@ async def set_commands(app):
         [
             BotCommand("start", "Запустить бота"),
             BotCommand("team", "Управление участниками"),
-            BotCommand("help", "\u041f\u043e\u043c\u043e\u0449\u044c"),
+            BotCommand("help", "Help"),
         ]
     )
     if SERVICE_ACCOUNTS:
