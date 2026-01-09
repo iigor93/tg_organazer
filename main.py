@@ -2,7 +2,6 @@ import logging
 
 from dotenv import load_dotenv
 from telegram import BotCommand, Update
-from telegram.request import HTTPXRequest
 from telegram.ext import (
     ApplicationBuilder,
     CallbackQueryHandler,
@@ -72,7 +71,7 @@ async def set_commands(app):
         [
             BotCommand("start", "Запустить бота"),
             BotCommand("team", "Управление участниками"),
-            BotCommand("help", "\u041f\u043e\u043c\u043e\u0449\u044c"),
+            BotCommand("help", "Помощь"),
         ]
     )
     if SERVICE_ACCOUNTS:
@@ -88,8 +87,7 @@ async def shutdown(app):
 
 
 def main() -> None:
-    request = HTTPXRequest(connect_timeout=10.0, read_timeout=30.0, write_timeout=30.0, pool_timeout=30.0)
-    application = ApplicationBuilder().token(TOKEN).request(request).post_shutdown(shutdown).build()
+    application = ApplicationBuilder().token(TOKEN).post_shutdown(shutdown).build()
 
     # start, Получение геолокации и Пропуск геолокации
     application.add_handler(CommandHandler("start", start))
