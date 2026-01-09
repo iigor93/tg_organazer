@@ -28,3 +28,6 @@ DEFAULT_TIMEZONE: int = 3  # +3 MSK
 DEFAULT_TIMEZONE_NAME: str = "Europe/Moscow"  # +3 MSK
 
 SERVICE_ACCOUNTS: str = os.getenv("SERVICE_ACCOUNTS", None)
+
+WEBHOOK_URL: str = os.getenv("WEBHOOK_URL", None)
+WEBHOOK_SECRET_TOKEN: str = os.getenv("WEBHOOK_SECRET_TOKEN", None)

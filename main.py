@@ -13,7 +13,7 @@ from telegram.ext import (
 )
 
 # ggg
-from config import SERVICE_ACCOUNTS, TOKEN
+from config import SERVICE_ACCOUNTS, TOKEN, WEBHOOK_SECRET_TOKEN, WEBHOOK_URL
 from database.session import engine
 from handlers.cal import handle_calendar_callback, show_calendar
 from handlers.contacts import handle_contact, handle_team_callback, handle_team_command
@@ -118,7 +118,19 @@ def main() -> None:
     application.post_init = set_commands
 
     logger.info("Бот запущен...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+    if WEBHOOK_URL:
+        logger.info(f"Через webhook {WEBHOOK_URL}")
+        application.run_webhook(
+            listen="0.0.0.0",  # noqa
+            port=8001,
+            secret_token=WEBHOOK_SECRET_TOKEN,
+            webhook_url=WEBHOOK_URL,
+            allowed_updates=Update.ALL_TYPES,
+        )
+    else:
+        logger.info("Через Long polling")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
