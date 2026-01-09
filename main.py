@@ -2,6 +2,7 @@ import logging
 
 from dotenv import load_dotenv
 from telegram import BotCommand, Update
+from telegram.request import HTTPXRequest
 from telegram.ext import (
     ApplicationBuilder,
     CallbackQueryHandler,
@@ -15,7 +16,7 @@ from telegram.ext import (
 from config import SERVICE_ACCOUNTS, TOKEN
 from database.session import engine
 from handlers.cal import handle_calendar_callback, show_calendar
-from handlers.contacts import handle_contact
+from handlers.contacts import handle_contact, handle_team_callback, handle_team_command
 from handlers.events import (
     get_event_constructor,
     handle_create_event_callback,
@@ -31,6 +32,10 @@ load_dotenv(".env")
 
 
 logger = logging.getLogger(__name__)
+
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.exception("Unhandled error", exc_info=context.error)
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -63,7 +68,12 @@ async def all_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def set_commands(app):
-    await app.bot.set_my_commands([BotCommand("start", "Запустить бота")])
+    await app.bot.set_my_commands(
+        [
+            BotCommand("start", "Запустить бота"),
+            BotCommand("team", "Управление участниками"),
+        ]
+    )
     if SERVICE_ACCOUNTS:
         try:
             for service_account in SERVICE_ACCOUNTS.split(";"):
@@ -77,10 +87,12 @@ async def shutdown(app):
 
 
 def main() -> None:
-    application = ApplicationBuilder().token(TOKEN).post_shutdown(shutdown).build()
+    request = HTTPXRequest(connect_timeout=10.0, read_timeout=30.0, write_timeout=30.0, pool_timeout=30.0)
+    application = ApplicationBuilder().token(TOKEN).request(request).post_shutdown(shutdown).build()
 
     # start, Получение геолокации и Пропуск геолокации
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("team", handle_team_command))
     application.add_handler(MessageHandler(filters.LOCATION, handle_location))
     application.add_handler(MessageHandler(filters.Regex("^⏭ Пропустить$"), handle_skip))
 
@@ -93,6 +105,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_create_event_callback, pattern="^create_event_"))
     application.add_handler(CallbackQueryHandler(handle_delete_event_callback, pattern="^delete_event_"))
     application.add_handler(CallbackQueryHandler(handle_participants_callback, pattern="^participants_"))
+    application.add_handler(CallbackQueryHandler(handle_team_callback, pattern="^team_"))
     application.add_handler(CallbackQueryHandler(handle_event_participants_callback, pattern="^create_participant_event_"))
     application.add_handler(MessageHandler(filters.Regex("^🗓 Ближайшие события$"), show_upcoming_events))
 
@@ -100,6 +113,7 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     application.add_handler(CallbackQueryHandler(all_callbacks))
+    application.add_error_handler(error_handler)
 
     application.post_init = set_commands
 
