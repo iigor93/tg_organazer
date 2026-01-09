@@ -26,7 +26,7 @@ from handlers.events import (
     handle_time_callback,
     show_upcoming_events,
 )
-from handlers.start import handle_location, handle_skip, start
+from handlers.start import handle_help, handle_location, handle_skip, start
 
 load_dotenv(".env")
 
@@ -72,6 +72,7 @@ async def set_commands(app):
         [
             BotCommand("start", "Запустить бота"),
             BotCommand("team", "Управление участниками"),
+            BotCommand("help", "\u041f\u043e\u043c\u043e\u0449\u044c"),
         ]
     )
     if SERVICE_ACCOUNTS:
@@ -92,6 +93,7 @@ def main() -> None:
 
     # start, Получение геолокации и Пропуск геолокации
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", handle_help))
     application.add_handler(CommandHandler("team", handle_team_command))
     application.add_handler(MessageHandler(filters.LOCATION, handle_location))
     application.add_handler(MessageHandler(filters.Regex("^⏭ Пропустить$"), handle_skip))
