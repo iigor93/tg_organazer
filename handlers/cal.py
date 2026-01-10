@@ -85,7 +85,7 @@ async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         [
             InlineKeyboardButton(
                 f"✍️ Создать событие на {today.day:02d}.{today.month:02d}.{today.year}",
-                callback_data=f"cal_select_{today.year}_{today.month}_{today.day}",
+                callback_data=f"create_event_begin_{today.year}_{today.month}_{today.day}",
             )
         ]
     )
