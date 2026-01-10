@@ -1,4 +1,5 @@
 import logging
+import datetime
 
 from dotenv import load_dotenv
 from telegram import BotCommand, Update
@@ -17,6 +18,7 @@ from database.session import engine
 from handlers.cal import handle_calendar_callback, show_calendar
 from handlers.contacts import handle_contact, handle_team_callback, handle_team_command
 from handlers.events import (
+    generate_time_selector,
     get_event_constructor,
     handle_create_event_callback,
     handle_delete_event_callback,
@@ -41,7 +43,95 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     logger.info("handle_text")
     logger.info(update)
 
-    if context.user_data.get("await_event_description"):
+    await_time_input = context.user_data.get("await_time_input")
+    if await_time_input:
+        event = context.user_data.get("event")
+        if not event:
+            context.user_data.pop("await_time_input", None)
+            await update.message.reply_text("Событие не найдено. Откройте создание события заново.")
+            return
+
+        raw_value = (update.message.text or "").strip()
+        if not raw_value.isdigit():
+            await update.message.reply_text("Введите число.")
+            return
+
+        value = int(raw_value)
+        field = await_time_input.get("field")
+        time_type = await_time_input.get("time_type")
+
+        if field == "hour" and not (0 <= value <= 23):
+            await update.message.reply_text("Часы должны быть от 0 до 23.")
+            return
+
+        if field == "minute" and not (0 <= value <= 59):
+            await update.message.reply_text("Минуты должны быть от 0 до 59.")
+            return
+
+        base_time = event.start_time if time_type == "start" else event.stop_time
+        if base_time is None:
+            if time_type == "stop" and event.start_time:
+                base_time = event.start_time
+            else:
+                base_time = datetime.time(12, 0)
+
+        hours = base_time.hour
+        minutes = base_time.minute
+        if field == "hour":
+            hours = value
+        elif field == "minute":
+            minutes = value
+
+        selected_time = datetime.time(hours, minutes)
+        if time_type == "start":
+            event.start_time = selected_time
+        else:
+            event.stop_time = selected_time
+
+        context.user_data["event"] = event
+        prompt_message_id = await_time_input.get("prompt_message_id")
+        prompt_chat_id = await_time_input.get("prompt_chat_id")
+        if not prompt_message_id or not prompt_chat_id:
+            prompt_message_id = context.user_data.get("time_input_prompt_message_id")
+            prompt_chat_id = context.user_data.get("time_input_prompt_chat_id")
+        context.user_data.pop("await_time_input", None)
+        context.user_data.pop("time_input_prompt_message_id", None)
+        context.user_data.pop("time_input_prompt_chat_id", None)
+
+        reply_markup = generate_time_selector(hours=hours, minutes=minutes, time_type=time_type)
+        chat_id = context.user_data.get("time_picker_chat_id")
+        message_id = context.user_data.get("time_picker_message_id")
+        if chat_id and message_id:
+            await context.bot.edit_message_reply_markup(
+                chat_id=chat_id,
+                message_id=message_id,
+                reply_markup=reply_markup,
+            )
+        else:
+            await update.message.reply_text("Готово.", reply_markup=reply_markup)
+
+        if update.message:
+            try:
+                await context.bot.delete_message(
+                    chat_id=update.message.chat_id,
+                    message_id=update.message.message_id,
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to delete user time input message")
+
+        if prompt_message_id and prompt_chat_id:
+            try:
+                await context.bot.delete_message(
+                    chat_id=prompt_chat_id,
+                    message_id=prompt_message_id,
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to delete time input prompt message")
+
+        return
+
+    await_event_description = context.user_data.get("await_event_description")
+    if await_event_description:
         event = context.user_data.get("event")
         event.description = update.message.text
         context.user_data["event"] = event
@@ -54,7 +144,31 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
         # получаем кнопки
+        prompt_message_id = None
+        prompt_chat_id = None
+        if isinstance(await_event_description, dict):
+            prompt_message_id = await_event_description.get("prompt_message_id")
+            prompt_chat_id = await_event_description.get("prompt_chat_id")
         context.user_data.pop("await_event_description")
+
+        if update.message:
+            try:
+                await context.bot.delete_message(
+                    chat_id=update.message.chat_id,
+                    message_id=update.message.message_id,
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to delete user description message")
+
+        if prompt_message_id and prompt_chat_id:
+            try:
+                await context.bot.delete_message(
+                    chat_id=prompt_chat_id,
+                    message_id=prompt_message_id,
+                )
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to delete description prompt message")
+
         return
     await update.message.reply_text("Используйте кнопки для навигации.")
 
@@ -71,7 +185,7 @@ async def set_commands(app):
         [
             BotCommand("start", "Запустить бота"),
             BotCommand("team", "Управление участниками"),
-            BotCommand("help", "Help"),
+            BotCommand("help", "??????"),
         ]
     )
     if SERVICE_ACCOUNTS:

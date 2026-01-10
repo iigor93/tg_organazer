@@ -24,8 +24,8 @@ def generate_time_selector(hours: int = 12, minutes: int = 0, time_type: str = "
             InlineKeyboardButton("▲", callback_data=f"time_minute_up_{time_type}_{hours}_{minutes}"),
         ],
         [
-            InlineKeyboardButton(f"{hours:02d}", callback_data="time_ignore"),
-            InlineKeyboardButton(f"{minutes:02d}", callback_data="time_ignore"),
+            InlineKeyboardButton(f"{hours:02d}", callback_data=f"time_hour_set_{time_type}"),
+            InlineKeyboardButton(f"{minutes:02d}", callback_data=f"time_minute_set_{time_type}"),
         ],
         [
             InlineKeyboardButton("▼️", callback_data=f"time_hour_down_{time_type}_{hours}_{minutes}"),
@@ -77,11 +77,42 @@ async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
 
+    if query.message:
+        context.user_data["time_picker_message_id"] = query.message.message_id
+        context.user_data["time_picker_chat_id"] = query.message.chat_id
+
     event: Event | None = context.user_data.get("event")
 
     data = query.data
     hours = 12
     minutes = 0
+
+    if data.startswith("time_hour_set_"):
+        _, _, _, time_type = data.split("_")
+        message = await query.message.reply_text("Введите часы (0-23):")
+        context.user_data["await_time_input"] = {
+            "field": "hour",
+            "time_type": time_type,
+            "prompt_message_id": message.message_id,
+            "prompt_chat_id": message.chat_id,
+        }
+        context.user_data["time_input_prompt_message_id"] = message.message_id
+        context.user_data["time_input_prompt_chat_id"] = message.chat_id
+        return
+
+    if data.startswith("time_minute_set_"):
+        _, _, _, time_type = data.split("_")
+        message = await query.message.reply_text("Введите минуты (0-59):")
+        context.user_data["await_time_input"] = {
+            "field": "minute",
+            "time_type": time_type,
+            "prompt_message_id": message.message_id,
+            "prompt_chat_id": message.chat_id,
+        }
+        context.user_data["time_input_prompt_message_id"] = message.message_id
+        context.user_data["time_input_prompt_chat_id"] = message.chat_id
+        return
+
 
     if data.startswith("time_hour_up_"):
         _, _, _, _, hours_str, minutes_str = data.split("_")
@@ -184,7 +215,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
     event: Event | None = context.user_data.get("event")
     if not event:
-        event = Event(event_date=datetime.datetime.now().date(), tg_id=update.effective_user.id)
+        event = Event(event_date=datetime.datetime.now().date(), tg_id=user.id)
         context.user_data["event"] = event
 
     year, month, day = event.get_date()
@@ -194,7 +225,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
     if data.startswith("create_event_begin_"):
         try:
             _, _, _, year, month, day = data.split("_")
-            event = Event(event_date=datetime.datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d"), tg_id=update.effective_user.id)
+            event = Event(event_date=datetime.datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d"), tg_id=user.id)
             context.user_data["event"] = event
         except:  # noqa
             ...
@@ -247,8 +278,11 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text=text, reply_markup=reply_markup)
 
     elif data.startswith("create_event_description_"):
-        context.user_data["await_event_description"] = True
-        await query.message.reply_text(text="Опиши, что будет в событии:")
+        message = await query.message.reply_text(text="Опиши, что будет в событии:")
+        context.user_data["await_event_description"] = {
+            "prompt_message_id": message.message_id,
+            "prompt_chat_id": message.chat_id,
+        }
 
     elif data.startswith("create_event_save_recurrent_"):
         _, _, _, _, recurrent = data.split("_")
