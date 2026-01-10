@@ -113,15 +113,11 @@ class DBController:
             return 0
 
         async with AsyncSessionLocal() as session:
-            current_user = (
-                await session.execute(select(DB_User).where(DB_User.tg_id == current_tg_id))
-            ).scalar_one_or_none()
+            current_user = (await session.execute(select(DB_User).where(DB_User.tg_id == current_tg_id))).scalar_one_or_none()
             if not current_user:
                 return 0
 
-            related_users = (
-                await session.execute(select(DB_User).where(DB_User.tg_id.in_(related_tg_ids)))
-            ).scalars().all()
+            related_users = (await session.execute(select(DB_User).where(DB_User.tg_id.in_(related_tg_ids)))).scalars().all()
             if not related_users:
                 return 0
 
@@ -483,7 +479,7 @@ class DBController:
             await session.commit()
 
     @staticmethod
-    async def get_current_day_events_all_users(event_dt: datetime, session: AsyncSession) -> list:
+    async def get_current_day_events_all_users(event_dt: datetime, session: AsyncSession, limit: int = 400, offset: int = 0) -> list:
         last_day = monthrange(event_dt.year, event_dt.month)[1]
         monthly_clause = DbEvent.monthly == event_dt.day
         if event_dt.day == last_day:
@@ -509,6 +505,8 @@ class DBController:
                 ),
             )
             .order_by(DbEvent.start_time)
+            .limit(limit)
+            .offset(offset)
         )
 
         event_list = []
