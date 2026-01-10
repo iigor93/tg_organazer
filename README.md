@@ -25,6 +25,8 @@ Telegram bot for personal events and reminders with calendar UI, participants, a
 - `entities.py` - Pydantic models for event/user entities.
 - `cron_handler.py` - scheduled reminders.
 - `migrations/` - Alembic migrations.
+- `api/` - NestJS API for the web app (PostgreSQL).
+- `web/` - React SPA (calendar UI + Telegram login).
 
 ## Requirements
 - Python 3.12
@@ -122,3 +124,32 @@ Add a participant:
 
 ## License
 Specify your license here.
+
+## Web app
+API (NestJS):
+
+```powershell
+cd api
+cp .env.example .env
+npm install
+npm run start:dev
+```
+
+SPA (React):
+
+```powershell
+cd web
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Environment notes:
+- `TG_BOT_TOKEN` is required in `api/.env` for Telegram login signature checks.
+- `VITE_TG_BOT_USERNAME` must match your bot username for the login widget.
+- `CLIENT_URL` should point to the SPA URL (comma-separated list allowed).
+
+## VPS deployment (outline)
+- Build API: `npm run build` in `api/`, run with pm2 or systemd on port 3000.
+- Build SPA: `npm run build` in `web/`, serve `web/dist` via Nginx.
+- Configure Nginx reverse proxy to `http://127.0.0.1:3000` for `/api` or a separate subdomain.

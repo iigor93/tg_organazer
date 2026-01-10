@@ -42,10 +42,10 @@ async def handle_participants_callback(update: Update, context: ContextTypes.DEF
 
     query = update.callback_query
     await query.answer()
-    event: Event | None = context.user_data.get("event")
+    event: Event | None = context.chat_data.get("event")
 
     tg_id_income = int(query.data.split("_")[1])
-    is_active = context.user_data.get("participants_status", {}).get(tg_id_income, True)
+    is_active = context.chat_data.get("participants_status", {}).get(tg_id_income, True)
     if not is_active:
         return
 
@@ -54,11 +54,11 @@ async def handle_participants_callback(update: Update, context: ContextTypes.DEF
     else:
         event.participants.append(tg_id_income)
 
-    context.user_data["event"] = event
+    context.chat_data["event"] = event
 
     list_btn = []
     for tg_id, name in event.all_user_participants.items():
-        is_active = context.user_data.get("participants_status", {}).get(tg_id, True)
+        is_active = context.chat_data.get("participants_status", {}).get(tg_id, True)
         if not is_active:
             name = f"{name} (не в боте)"
         elif tg_id in event.participants:
@@ -77,7 +77,7 @@ async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     query = update.callback_query
     await query.answer()
 
-    event: Event | None = context.user_data.get("event")
+    event: Event | None = context.chat_data.get("event")
 
     data = query.data
     hours = 12
@@ -113,7 +113,7 @@ async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             event.stop_time = selected_time
             time_type = "stop"
 
-        context.user_data["event"] = event
+        context.chat_data["event"] = event
 
     logger.info(f"*** time picker: {event}")
 
@@ -182,10 +182,10 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
     db_user = await db_controller.save_update_user(tg_user=tg_user)
     logger.info(f"*** DB user: {db_user}")
 
-    event: Event | None = context.user_data.get("event")
+    event: Event | None = context.chat_data.get("event")
     if not event:
-        event = Event(event_date=datetime.datetime.now().date(), tg_id=update.effective_user.id)
-        context.user_data["event"] = event
+        event = Event(event_date=datetime.datetime.now().date(), tg_id=update.effective_chat.id)
+        context.chat_data["event"] = event
 
     year, month, day = event.get_date()
 
@@ -194,14 +194,14 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
     if data.startswith("create_event_begin_"):
         try:
             _, _, _, year, month, day = data.split("_")
-            event = Event(event_date=datetime.datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d"), tg_id=update.effective_user.id)
-            context.user_data["event"] = event
+            event = Event(event_date=datetime.datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d"), tg_id=update.effective_chat.id)
+            context.chat_data["event"] = event
         except:  # noqa
             ...
 
         participants = await db_controller.get_participants_with_status(tg_id=user.id, include_inactive=True)
-        context.user_data["participants_status"] = {tg_id: is_active for tg_id, (_, is_active) in participants.items()}
-        context.user_data["event"].all_user_participants = {tg_id: name for tg_id, (name, _) in participants.items()}
+        context.chat_data["participants_status"] = {tg_id: is_active for tg_id, (_, is_active) in participants.items()}
+        context.chat_data["event"].all_user_participants = {tg_id: name for tg_id, (name, _) in participants.items()}
 
         has_participants = bool(event.all_user_participants)
         text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants)
@@ -215,7 +215,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             minutes = event.start_time.minute
         elif event and not event.start_time:
             event.start_time = datetime.datetime.strptime("12:00", "%H:%M").time()
-            context.user_data["event"] = event
+            context.chat_data["event"] = event
 
         reply_markup = generate_time_selector(hours=int(hours), minutes=int(minutes), time_type="start")
 
@@ -230,7 +230,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             minutes = event.stop_time.minute
         elif event and not event.stop_time:
             event.stop_time = datetime.datetime.strptime("12:00", "%H:%M").time()
-            context.user_data["event"] = event
+            context.chat_data["event"] = event
 
         if event.start_time:
             hours = event.start_time.hour
@@ -239,7 +239,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             minutes = int(minutes)
 
             event.stop_time = datetime.datetime.strptime(f"{hours:02d}:{minutes:02d}", "%H:%M").time()
-            context.user_data["event"] = event
+            context.chat_data["event"] = event
 
             text += f"\n\n (уже задано время начала события {hours:02d}:{minutes:02d})"
 
@@ -247,13 +247,13 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text=text, reply_markup=reply_markup)
 
     elif data.startswith("create_event_description_"):
-        context.user_data["await_event_description"] = True
+        context.chat_data["await_event_description"] = True
         await query.message.reply_text(text="Опиши, что будет в событии:")
 
     elif data.startswith("create_event_save_recurrent_"):
         _, _, _, _, recurrent = data.split("_")
         event.recurrent = Recurrent(recurrent)
-        context.user_data["event"] = event
+        context.chat_data["event"] = event
 
         has_participants = bool(event.all_user_participants)
         text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants)
@@ -270,7 +270,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
     elif data.startswith("create_event_participants_"):
         list_btn = []
         for tg_id, name in event.all_user_participants.items():
-            is_active = context.user_data.get("participants_status", {}).get(tg_id, True)
+            is_active = context.chat_data.get("participants_status", {}).get(tg_id, True)
             if not is_active:
                 name = f"{name} (не в боте)"
             elif tg_id in event.participants:
@@ -283,7 +283,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text="Добавь пользователей к событию", reply_markup=reply_markup)
     elif data.startswith("create_event_save_to_db"):
         event_id = await db_controller.save_event(event=event, tz_name=db_user.time_zone)
-        context.user_data.pop("event")
+        context.chat_data.pop("event")
         year, month, day = event.get_date()
         events = await db_controller.get_current_day_events_by_user(
             user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
@@ -313,7 +313,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             bot = telegram.Bot(token=TOKEN)
 
             text = (
-                f"{str(update.effective_user.first_name).title()} добавил событие"
+                f"{str(update.effective_chat.first_name).title()} добавил событие"
                 f"\n{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year} "
                 f"время {event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
                 f"\n{event.description}"
@@ -356,7 +356,7 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
     tg_user = TgUser.model_validate(user)
     db_user = await db_controller.save_update_user(tg_user=tg_user)
     logger.info(f"*** DB user: {db_user}")
-    # user_id = update.effective_user.id
+    # user_id = update.effective_chat.id
     data = query.data
 
     if "_id_" in data:

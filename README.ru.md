@@ -25,6 +25,8 @@ English version: `README.md`.
 - `entities.py` - Pydantic модели сущностей.
 - `cron_handler.py` - напоминания по расписанию.
 - `migrations/` - миграции Alembic.
+- `api/` - NestJS API для веб‑приложения (PostgreSQL).
+- `web/` - React SPA (календарь + вход через Telegram).
 
 ## Требования
 - Python 3.12
@@ -122,3 +124,32 @@ python -m pytest -q
 
 ## Лицензия
 Укажите вашу лицензию здесь.
+
+## Веб‑приложение
+API (NestJS):
+
+```powershell
+cd api
+cp .env.example .env
+npm install
+npm run start:dev
+```
+
+SPA (React):
+
+```powershell
+cd web
+cp .env.example .env
+npm install
+npm run dev
+```
+
+Примечания по переменным окружения:
+- `TG_BOT_TOKEN` нужен в `api/.env` для проверки подписи Telegram Login.
+- `VITE_TG_BOT_USERNAME` должен совпадать с именем бота.
+- `CLIENT_URL` — адрес SPA (можно несколько через запятую).
+
+## Деплой на VPS (кратко)
+- API: `npm run build` в `api/`, запуск через pm2/systemd на порту 3000.
+- SPA: `npm run build` в `web/`, раздать `web/dist` через Nginx.
+- Настроить reverse proxy на `http://127.0.0.1:3000` (например, через `/api` или отдельный субдомен).

@@ -30,8 +30,8 @@ async def handle_team_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("У вас нет привязанных участников.")
         return
 
-    context.user_data["team_participants"] = participants
-    context.user_data["team_selected"] = []
+    context.chat_data["team_participants"] = participants
+    context.chat_data["team_selected"] = []
 
     reply_markup = _build_team_keyboard(participants, set())
     await update.message.reply_text(
@@ -49,9 +49,9 @@ async def handle_team_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     data = query.data
 
     participants = (
-        context.user_data.get("team_participants") or await db_controller.get_participants(tg_id=user_id, include_inactive=True) or {}
+        context.chat_data.get("team_participants") or await db_controller.get_participants(tg_id=user_id, include_inactive=True) or {}
     )
-    selected = set(context.user_data.get("team_selected") or [])
+    selected = set(context.chat_data.get("team_selected") or [])
 
     if data.startswith("team_toggle_"):
         _, _, tg_id_str = data.split("_")
@@ -61,7 +61,7 @@ async def handle_team_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             selected.add(tg_id)
 
-        context.user_data["team_selected"] = list(selected)
+        context.chat_data["team_selected"] = list(selected)
         reply_markup = _build_team_keyboard(participants, selected)
         await query.edit_message_reply_markup(reply_markup=reply_markup)
         return
@@ -76,8 +76,8 @@ async def handle_team_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
         deleted = await db_controller.delete_participants(current_tg_id=user_id, related_tg_ids=list(selected))
         participants = await db_controller.get_participants(tg_id=user_id, include_inactive=True) or {}
-        context.user_data["team_participants"] = participants
-        context.user_data["team_selected"] = []
+        context.chat_data["team_participants"] = participants
+        context.chat_data["team_selected"] = []
 
         if not participants:
             await query.edit_message_text("Все участники удалены.")
@@ -91,8 +91,8 @@ async def handle_team_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     if data == "team_close":
-        context.user_data.pop("team_participants", None)
-        context.user_data.pop("team_selected", None)
+        context.chat_data.pop("team_participants", None)
+        context.chat_data.pop("team_selected", None)
         await query.edit_message_text("Управление участниками закрыто.")
         return
 
@@ -116,7 +116,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             first_name=first_name,
             last_name=last_name,
         )
-        created_user = await db_controller.save_update_user(tg_user=new_user, from_contact=True, current_user=update.effective_user.id)
+        created_user = await db_controller.save_update_user(tg_user=new_user, from_contact=True, current_user=update.effective_chat.id)
         if not created_user:
             text = f"Пользователь {first_name} уже добавлен в ваши контакты!"
         elif created_user.is_active:
@@ -124,7 +124,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         else:
             text = f"Пользователь {first_name} добавлен в ваши контакты!\nНо его еще нет в боте."
 
-        await db_controller.get_user(tg_id=update.effective_user.id)
+        await db_controller.get_user(tg_id=update.effective_chat.id)
 
         await update.message.reply_text(text=text)
     else:
