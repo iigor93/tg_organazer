@@ -1,5 +1,5 @@
-import logging
 import datetime
+import logging
 
 from dotenv import load_dotenv
 from telegram import BotCommand, Update
@@ -43,11 +43,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     logger.info("handle_text")
     logger.info(update)
 
-    await_time_input = context.user_data.get("await_time_input")
+    await_time_input = context.chat_data.get("await_time_input")
     if await_time_input:
-        event = context.user_data.get("event")
+        event = context.chat_data.get("event")
         if not event:
-            context.user_data.pop("await_time_input", None)
+            context.chat_data.pop("await_time_input", None)
             await update.message.reply_text("Событие не найдено. Откройте создание события заново.")
             return
 
@@ -88,19 +88,19 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         else:
             event.stop_time = selected_time
 
-        context.user_data["event"] = event
+        context.chat_data["event"] = event
         prompt_message_id = await_time_input.get("prompt_message_id")
         prompt_chat_id = await_time_input.get("prompt_chat_id")
         if not prompt_message_id or not prompt_chat_id:
-            prompt_message_id = context.user_data.get("time_input_prompt_message_id")
-            prompt_chat_id = context.user_data.get("time_input_prompt_chat_id")
-        context.user_data.pop("await_time_input", None)
-        context.user_data.pop("time_input_prompt_message_id", None)
-        context.user_data.pop("time_input_prompt_chat_id", None)
+            prompt_message_id = context.chat_data.get("time_input_prompt_message_id")
+            prompt_chat_id = context.chat_data.get("time_input_prompt_chat_id")
+        context.chat_data.pop("await_time_input", None)
+        context.chat_data.pop("time_input_prompt_message_id", None)
+        context.chat_data.pop("time_input_prompt_chat_id", None)
 
         reply_markup = generate_time_selector(hours=hours, minutes=minutes, time_type=time_type)
-        chat_id = context.user_data.get("time_picker_chat_id")
-        message_id = context.user_data.get("time_picker_message_id")
+        chat_id = context.chat_data.get("time_picker_chat_id")
+        message_id = context.chat_data.get("time_picker_message_id")
         if chat_id and message_id:
             await context.bot.edit_message_reply_markup(
                 chat_id=chat_id,
@@ -130,11 +130,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
         return
 
-    await_event_description = context.user_data.get("await_event_description")
+    await_event_description = context.chat_data.get("await_event_description")
     if await_event_description:
-        event = context.user_data.get("event")
+        event = context.chat_data.get("event")
         event.description = update.message.text
-        context.user_data["event"] = event
+        context.chat_data["event"] = event
 
         description_add = f"Добавлено описание к событию *{event.get_format_date()}*:\n\n{event.description}"
         has_participants = bool(event.all_user_participants)
@@ -149,7 +149,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         if isinstance(await_event_description, dict):
             prompt_message_id = await_event_description.get("prompt_message_id")
             prompt_chat_id = await_event_description.get("prompt_chat_id")
-        context.user_data.pop("await_event_description")
+        context.chat_data.pop("await_event_description")
 
         if update.message:
             try:
@@ -185,7 +185,7 @@ async def set_commands(app):
         [
             BotCommand("start", "Запустить бота"),
             BotCommand("team", "Управление участниками"),
-            BotCommand("help", "??????"),
+            BotCommand("help", "Help"),
         ]
     )
     if SERVICE_ACCOUNTS:

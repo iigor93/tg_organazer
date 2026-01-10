@@ -184,7 +184,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
     event: Event | None = context.chat_data.get("event")
     if not event:
-        event = Event(event_date=datetime.datetime.now().date(), tg_id=update.effective_user.id)
+        event = Event(event_date=datetime.datetime.now().date(), tg_id=update.effective_chat.id)
         context.chat_data["event"] = event
 
     year, month, day = event.get_date()
@@ -194,7 +194,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
     if data.startswith("create_event_begin_"):
         try:
             _, _, _, year, month, day = data.split("_")
-            event = Event(event_date=datetime.datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d"), tg_id=update.effective_user.id)
+            event = Event(event_date=datetime.datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d"), tg_id=update.effective_chat.id)
             context.chat_data["event"] = event
         except:  # noqa
             ...
@@ -313,7 +313,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             bot = telegram.Bot(token=TOKEN)
 
             text = (
-                f"{str(update.effective_user.first_name).title()} добавил событие"
+                f"{str(update.effective_chat.first_name).title()} добавил событие"
                 f"\n{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year} "
                 f"время {event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
                 f"\n{event.description}"
@@ -356,7 +356,7 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
     tg_user = TgUser.model_validate(user)
     db_user = await db_controller.save_update_user(tg_user=tg_user)
     logger.info(f"*** DB user: {db_user}")
-    # user_id = update.effective_user.id
+    # user_id = update.effective_chat.id
     data = query.data
 
     if "_id_" in data:

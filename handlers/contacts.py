@@ -116,7 +116,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             first_name=first_name,
             last_name=last_name,
         )
-        created_user = await db_controller.save_update_user(tg_user=new_user, from_contact=True, current_user=update.effective_user.id)
+        created_user = await db_controller.save_update_user(tg_user=new_user, from_contact=True, current_user=update.effective_chat.id)
         if not created_user:
             text = f"Пользователь {first_name} уже добавлен в ваши контакты!"
         elif created_user.is_active:
@@ -124,7 +124,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         else:
             text = f"Пользователь {first_name} добавлен в ваши контакты!\nНо его еще нет в боте."
 
-        await db_controller.get_user(tg_id=update.effective_user.id)
+        await db_controller.get_user(tg_id=update.effective_chat.id)
 
         await update.message.reply_text(text=text)
     else:
