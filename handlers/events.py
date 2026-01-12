@@ -357,7 +357,11 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
             for user in event.participants:
                 new_event_id = await db_controller.resave_event_to_participant(event_id=event_id, user_id=user)
-                btn = [[InlineKeyboardButton("Не добавлять", callback_data=f"create_participant_event_cancel_{new_event_id}")]]
+                creator_id = update.effective_chat.id if update.effective_chat else None
+                cancel_data = f"create_participant_event_cancel_{new_event_id}"
+                if creator_id:
+                    cancel_data = f"{cancel_data}_{creator_id}"
+                btn = [[InlineKeyboardButton("Не добавлять", callback_data=cancel_data)]]
                 reply_markup = InlineKeyboardMarkup(btn)
                 await bot.send_message(chat_id=user, text=text, reply_markup=reply_markup)
 
@@ -525,7 +529,23 @@ async def handle_event_participants_callback(update: Update, context: ContextTyp
     logger.info(f"*** DB user: {db_user}")
 
     if "cancel" in data:
-        _, _, _, _, event_id = data.split("_")
-        await db_controller.delete_event_by_id(event_id=event_id, tz_name=db_user.time_zone)
-        await query.edit_message_text(text="Событие не добавлено в календарь")
+        parts = data.split("_")
+        event_id = parts[4]
+        creator_id = None
+        if len(parts) > 5:
+            try:
+                creator_id = int(parts[5])
+            except ValueError:
+                creator_id = None
+
+        _, event_info = await db_controller.delete_event_by_id(event_id=event_id, tz_name=db_user.time_zone)
+        await query.edit_message_text(text="Событие не добавлено в календарь.")
+
+        if creator_id and update.effective_chat and creator_id != update.effective_chat.id:
+            user_name = update.effective_chat.full_name or update.effective_chat.first_name or "Участник"
+            text = f"Участник {user_name} отказался от участия в событии: {event_info}"
+            try:
+                await context.bot.send_message(chat_id=creator_id, text=text)
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to notify event creator about отказ")
         return
