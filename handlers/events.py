@@ -357,7 +357,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
             for user in event.participants:
                 new_event_id = await db_controller.resave_event_to_participant(event_id=event_id, user_id=user)
-                creator_id = update.effective_user.id if update.effective_user else None
+                creator_id = update.effective_chat.id if update.effective_chat else None
                 cancel_data = f"create_participant_event_cancel_{new_event_id}"
                 if creator_id:
                     cancel_data = f"{cancel_data}_{creator_id}"
@@ -541,8 +541,8 @@ async def handle_event_participants_callback(update: Update, context: ContextTyp
         _, event_info = await db_controller.delete_event_by_id(event_id=event_id, tz_name=db_user.time_zone)
         await query.edit_message_text(text="Событие не добавлено в календарь.")
 
-        if creator_id and update.effective_user and creator_id != update.effective_user.id:
-            user_name = update.effective_user.full_name or update.effective_user.first_name or "Участник"
+        if creator_id and update.effective_chat and creator_id != update.effective_chat.id:
+            user_name = update.effective_chat.full_name or update.effective_chat.first_name or "Участник"
             text = f"Участник {user_name} отказался от участия в событии: {event_info}"
             try:
                 await context.bot.send_message(chat_id=creator_id, text=text)
