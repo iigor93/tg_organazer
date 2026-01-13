@@ -223,6 +223,15 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
     logger.info(f"* EVENT: {event}")
 
     if data.startswith("create_event_begin_"):
+        context.chat_data.pop("team_participants", None)
+        context.chat_data.pop("team_selected", None)
+        context.chat_data.pop("participants_status", None)
+        context.chat_data.pop("time_picker_message_id", None)
+        context.chat_data.pop("time_picker_chat_id", None)
+        context.chat_data.pop("await_time_input", None)
+        context.chat_data.pop("time_input_prompt_message_id", None)
+        context.chat_data.pop("time_input_prompt_chat_id", None)
+
         try:
             _, _, _, year, month, day = data.split("_")
             event = Event(event_date=datetime.datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d"), tg_id=update.effective_chat.id)
