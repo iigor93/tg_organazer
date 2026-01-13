@@ -14,6 +14,15 @@ logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("start")
+    context.chat_data.pop("team_participants", None)
+    context.chat_data.pop("team_selected", None)
+    context.chat_data.pop("event", None)
+    context.chat_data.pop("participants_status", None)
+    context.chat_data.pop("time_picker_message_id", None)
+    context.chat_data.pop("time_picker_chat_id", None)
+    context.chat_data.pop("await_time_input", None)
+    context.chat_data.pop("time_input_prompt_message_id", None)
+    context.chat_data.pop("time_input_prompt_chat_id", None)
 
     user = update.effective_chat
     tg_user = TgUser.model_validate(user)
@@ -38,6 +47,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("handle_help")
+    context.chat_data.pop("team_participants", None)
+    context.chat_data.pop("team_selected", None)
+    context.chat_data.pop("event", None)
+    context.chat_data.pop("participants_status", None)
+    context.chat_data.pop("time_picker_message_id", None)
+    context.chat_data.pop("time_picker_chat_id", None)
+    context.chat_data.pop("await_time_input", None)
+    context.chat_data.pop("time_input_prompt_message_id", None)
+    context.chat_data.pop("time_input_prompt_chat_id", None)
     text = (
         "👋 Привет! Я помогу планировать дела и напоминать о событиях.\n\n"
         "📌 Основные команды:\n"
@@ -61,6 +79,7 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         "Если что-то не работает — просто напиши @FamPlanner, помогу разобраться 😊"
     )
     await update.message.reply_text(text=text)
+
 
 async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("handle_location")
