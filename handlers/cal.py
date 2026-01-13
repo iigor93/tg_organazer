@@ -69,6 +69,16 @@ async def generate_calendar(user_id: int, year: int, month: int, tz_name: str = 
 async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("show_calendar")
 
+    context.chat_data.pop("team_participants", None)
+    context.chat_data.pop("team_selected", None)
+    context.chat_data.pop("event", None)
+    context.chat_data.pop("participants_status", None)
+    context.chat_data.pop("time_picker_message_id", None)
+    context.chat_data.pop("time_picker_chat_id", None)
+    context.chat_data.pop("await_time_input", None)
+    context.chat_data.pop("time_input_prompt_message_id", None)
+    context.chat_data.pop("time_input_prompt_chat_id", None)
+
     user = update.effective_chat
     tg_user = TgUser.model_validate(user)
     db_user = await db_controller.save_update_user(tg_user=tg_user)

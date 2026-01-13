@@ -23,6 +23,15 @@ def _build_team_keyboard(participants: dict[int, str], selected: set[int]) -> In
 
 async def handle_team_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("handle_team_command")
+    context.chat_data.pop("team_participants", None)
+    context.chat_data.pop("team_selected", None)
+    context.chat_data.pop("event", None)
+    context.chat_data.pop("participants_status", None)
+    context.chat_data.pop("time_picker_message_id", None)
+    context.chat_data.pop("time_picker_chat_id", None)
+    context.chat_data.pop("await_time_input", None)
+    context.chat_data.pop("time_input_prompt_message_id", None)
+    context.chat_data.pop("time_input_prompt_chat_id", None)
     user_id = update.effective_chat.id
 
     participants = await db_controller.get_participants(tg_id=user_id, include_inactive=True)
