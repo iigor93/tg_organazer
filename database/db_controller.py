@@ -432,7 +432,7 @@ class DBController:
                         _calculated_date = start_local + timedelta(days=_date)
                         if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
                             continue
-                        _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time()).astimezone(user_tz)
+                        _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time())
                         event_list.append({_combined: event.description})
 
                 elif event.monthly is not None:
@@ -454,7 +454,7 @@ class DBController:
                         if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
                             continue
                         if _event_start_at_user_tz.day == _calculated_date.day and _event_start_at_user_tz.month == _calculated_date.month:
-                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time()).astimezone(user_tz)
+                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time())
                             event_list.append({_combined: event.description})
                             break
 
@@ -464,7 +464,7 @@ class DBController:
                         if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
                             continue
                         if _event_start_at_user_tz.weekday() == _calculated_date.weekday() and _event_start_at_user_tz < _calculated_date:
-                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time()).astimezone(user_tz)
+                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time())
                             event_list.append({_combined: event.description})
 
             if event_list:
