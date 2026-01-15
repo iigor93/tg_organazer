@@ -445,7 +445,7 @@ class DBController:
                             _calculated_date.year, _calculated_date.month, _event_start_at_user_tz.day
                         )
                         if _calculated_date.day == effective_day:
-                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time()).astimezone(user_tz)
+                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time())
                             event_list.append({_combined: event.description})
 
                 elif event.annual_day is not None:
