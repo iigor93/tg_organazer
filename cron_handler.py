@@ -4,6 +4,7 @@ import datetime
 import logging
 
 import telegram
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from config import TOKEN, database_url
@@ -34,11 +35,21 @@ async def send_messages(send_now: bool = False):
             break
 
         for event in events:
-            text = "⏰ Напоминание"
+            text = "🔔 Напоминание о начале события"
             if not send_now:
                 text += "\nЧерез 1 час:"
-            text += f"\n⏱️ {event.get('start_time').strftime('%H:%M')}\n📝 {event.get('description')}"
-            await bot.send_message(chat_id=event.get("tg_id"), text=text)
+            text += f"\n⏰ {event.get('start_time').strftime('%H:%M')}\n📝 {event.get('description')}"
+
+            event_id = event.get("event_id")
+            reply_markup = None
+            if event_id:
+                buttons = [
+                    [InlineKeyboardButton("Перенести на 1 час", callback_data=f"reschedule_event_{event_id}_hour")],
+                    [InlineKeyboardButton("Перенести на завтра", callback_data=f"reschedule_event_{event_id}_day")],
+                ]
+                reply_markup = InlineKeyboardMarkup(buttons)
+
+            await bot.send_message(chat_id=event.get("tg_id"), text=text, reply_markup=reply_markup)
             await asyncio.sleep(0.001)
 
         await engine.dispose()

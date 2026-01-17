@@ -533,6 +533,7 @@ class DBController:
 
             event_list.append(
                 {
+                    "event_id": event.id,
                     "tg_id": event.tg_id,
                     "start_time": (event.start_at + users_dict.get(event.tg_id, dt_aware_default)).time(),
                     "description": event.description,
@@ -565,6 +566,39 @@ class DBController:
             )
 
             session.add(new_event)
+            await session.commit()
+            await session.refresh(new_event)
+
+            return new_event.id
+
+    @staticmethod
+    async def reschedule_event(event_id: int, shift_hours: int = 0, shift_days: int = 0) -> int | None:
+        async with AsyncSessionLocal() as session:
+            event = (await session.execute(select(DbEvent).where(DbEvent.id == int(event_id)))).scalar_one_or_none()
+            if not event:
+                return None
+
+            delta = timedelta(hours=shift_hours, days=shift_days)
+            new_start_at = event.start_at + delta
+            new_stop_at = event.stop_at + delta if event.stop_at else None
+
+            new_event = DbEvent(
+                description=event.description,
+                start_time=new_start_at.time(),
+                start_at=new_start_at,
+                stop_at=new_stop_at,
+                single_event=event.single_event,
+                daily=event.daily,
+                weekly=new_start_at.weekday() if event.weekly is not None else None,
+                monthly=new_start_at.day if event.monthly is not None else None,
+                annual_day=new_start_at.day if event.annual_day is not None else None,
+                annual_month=new_start_at.month if event.annual_month is not None else None,
+                tg_id=event.tg_id,
+            )
+
+            session.add(new_event)
+            await session.flush()
+            await session.delete(event)
             await session.commit()
             await session.refresh(new_event)
 
