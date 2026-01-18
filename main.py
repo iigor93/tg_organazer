@@ -24,6 +24,7 @@ from handlers.events import (
     handle_delete_event_callback,
     handle_event_participants_callback,
     handle_participants_callback,
+    handle_reschedule_event_callback,
     handle_time_callback,
     show_upcoming_events,
 )
@@ -221,6 +222,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_participants_callback, pattern="^participants_"))
     application.add_handler(CallbackQueryHandler(handle_team_callback, pattern="^team_"))
     application.add_handler(CallbackQueryHandler(handle_event_participants_callback, pattern="^create_participant_event_"))
+    application.add_handler(CallbackQueryHandler(handle_reschedule_event_callback, pattern="^reschedule_event_"))
     application.add_handler(MessageHandler(filters.Regex("^🗓 Ближайшие события$"), show_upcoming_events))
 
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))

@@ -568,3 +568,35 @@ async def handle_event_participants_callback(update: Update, context: ContextTyp
             except Exception:  # noqa: BLE001
                 logger.exception("Failed to notify event creator about отказ")
         return
+
+
+async def handle_reschedule_event_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("handle_reschedule_event_callback")
+
+    query = update.callback_query
+    await query.answer()
+
+    parts = query.data.split("_")
+    if len(parts) < 4:
+        return
+
+    event_id = parts[2]
+    action = parts[3]
+
+    shift_hours = 0
+    shift_days = 0
+    if action == "hour":
+        shift_hours = 1
+        human = "на 1 час"
+    elif action == "day":
+        shift_days = 1
+        human = "на завтра"
+    else:
+        return
+
+    new_event_id = await db_controller.reschedule_event(event_id=event_id, shift_hours=shift_hours, shift_days=shift_days)
+    if not new_event_id:
+        await query.edit_message_text(text="Не удалось перенести событие.")
+        return
+
+    await query.edit_message_text(text=f"Событие перенесено {human}.")
