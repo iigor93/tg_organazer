@@ -164,6 +164,66 @@ class DBController:
             return new_event.id
 
     @staticmethod
+    async def get_event_by_id(event_id: int, tz_name: str = config.DEFAULT_TIMEZONE_NAME) -> Event | None:
+        user_tz = ZoneInfo(tz_name)
+        async with AsyncSessionLocal() as session:
+            query = select(DbEvent).where(DbEvent.id == int(event_id))
+            db_event = (await session.execute(query)).scalar_one_or_none()
+            if not db_event:
+                return None
+
+        start_local = db_event.start_at.astimezone(user_tz)
+        stop_local_time = db_event.stop_at.astimezone(user_tz).time() if db_event.stop_at else None
+
+        if db_event.daily:
+            recurrent = Recurrent.daily
+        elif db_event.weekly is not None:
+            recurrent = Recurrent.weekly
+        elif db_event.monthly is not None:
+            recurrent = Recurrent.monthly
+        elif db_event.annual_day is not None:
+            recurrent = Recurrent.annual
+        else:
+            recurrent = Recurrent.never
+
+        return Event(
+            event_date=start_local.date(),
+            description=db_event.description,
+            start_time=start_local.time(),
+            stop_time=stop_local_time,
+            recurrent=recurrent,
+            tg_id=db_event.tg_id,
+        )
+
+    @staticmethod
+    async def update_event(event_id: int, event: Event, tz_name: str = config.DEFAULT_TIMEZONE_NAME) -> int | None:
+        user_tz = ZoneInfo(tz_name)
+        start_datetime_tz = datetime.combine(event.event_date, event.start_time).replace(tzinfo=user_tz).astimezone(timezone.utc)
+
+        stop_datetime_tz = None
+        if event.stop_time:
+            stop_datetime_tz = datetime.combine(event.event_date, event.stop_time).replace(tzinfo=user_tz).astimezone(timezone.utc)
+
+        values = dict(
+            description=event.description,
+            start_time=start_datetime_tz.time(),
+            start_at=start_datetime_tz,
+            stop_at=stop_datetime_tz,
+            single_event=True if event.recurrent == Recurrent.never else False,
+            daily=True if event.recurrent == Recurrent.daily else False,
+            weekly=start_datetime_tz.weekday() if event.recurrent == Recurrent.weekly else None,
+            monthly=start_datetime_tz.day if event.recurrent == Recurrent.monthly else None,
+            annual_day=start_datetime_tz.day if event.recurrent == Recurrent.annual else None,
+            annual_month=start_datetime_tz.month if event.recurrent == Recurrent.annual else None,
+        )
+
+        async with AsyncSessionLocal() as session:
+            update_query = update(DbEvent).where(DbEvent.id == int(event_id)).values(**values).returning(DbEvent.id)
+            updated_id = (await session.execute(update_query)).scalar_one_or_none()
+            await session.commit()
+            return updated_id
+
+    @staticmethod
     def get_weekday_days_in_month(year: int, month: int, weekday: int) -> list[int]:
         _, num_days = monthrange(year, month)
         return [day for day in range(1, num_days + 1) if date(year, month, day).weekday() == weekday]

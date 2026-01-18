@@ -1,6 +1,6 @@
 import logging
 from calendar import monthrange
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -37,7 +37,7 @@ async def generate_calendar(user_id: int, year: int, month: int, tz_name: str = 
     keyboard.append(
         [
             InlineKeyboardButton("◀", callback_data=f"cal_nav_{prev_year}_{prev_month}"),
-            InlineKeyboardButton(header, callback_data="cal_ignore"),
+            InlineKeyboardButton(header, callback_data=f"cal_month_{year}_{month}"),
             InlineKeyboardButton("▶", callback_data=f"cal_nav_{next_year}_{next_month}"),
         ]
     )
@@ -62,6 +62,55 @@ async def generate_calendar(user_id: int, year: int, month: int, tz_name: str = 
         for _ in range(7 - len(week)):
             week.append(InlineKeyboardButton(" ", callback_data="cal_ignore"))
         keyboard.append(week)
+
+    return InlineKeyboardMarkup(keyboard)
+
+
+async def generate_week_calendar(
+    user_id: int,
+    year: int,
+    month: int,
+    day: int,
+    tz_name: str = config.DEFAULT_TIMEZONE_NAME,
+) -> InlineKeyboardMarkup:
+    ref_date = date(year, month, day)
+    week_start = ref_date - timedelta(days=ref_date.weekday())
+    week_dates = [week_start + timedelta(days=i) for i in range(7)]
+
+    event_dicts: dict[tuple[int, int], dict[int, int]] = {}
+    for day_date in week_dates:
+        key = (day_date.year, day_date.month)
+        if key not in event_dicts:
+            event_dicts[key] = await db_controller.get_current_month_events_by_user(
+                user_id=user_id, month=day_date.month, year=day_date.year, tz_name=tz_name
+            )
+
+    header = f"{MONTH_NAMES[ref_date.month - 1].title()} {ref_date.year}"
+
+    prev_week = ref_date - timedelta(days=7)
+    next_week = ref_date + timedelta(days=7)
+
+    keyboard = []
+    keyboard.append(
+        [
+            InlineKeyboardButton("◀", callback_data=f"cal_week_nav_{prev_week.year}_{prev_week.month}_{prev_week.day}"),
+            InlineKeyboardButton(header, callback_data=f"cal_month_{ref_date.year}_{ref_date.month}"),
+            InlineKeyboardButton("▶", callback_data=f"cal_week_nav_{next_week.year}_{next_week.month}_{next_week.day}"),
+        ]
+    )
+
+    weekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    keyboard.append([InlineKeyboardButton(day, callback_data="cal_ignore") for day in weekdays])
+
+    week_row = []
+    for day_date in week_dates:
+        event_dict = event_dicts[(day_date.year, day_date.month)]
+        number_events = event_dict.get(day_date.day)
+        show_day = f"{day_date.day}{to_superscript(number_events)}" if number_events else day_date.day
+        week_row.append(
+            InlineKeyboardButton(str(show_day), callback_data=f"cal_select_{day_date.year}_{day_date.month}_{day_date.day}")
+        )
+    keyboard.append(week_row)
 
     return InlineKeyboardMarkup(keyboard)
 
@@ -130,33 +179,64 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
         reply_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
         await query.edit_message_text("📅 Выберите дату события:", reply_markup=reply_markup)
 
+    elif data.startswith("cal_week_nav_"):
+        parts = data.split("_")
+        year = int(parts[-3])
+        month = int(parts[-2])
+        day = int(parts[-1])
+
+        reply_markup = await generate_week_calendar(
+            year=year,
+            month=month,
+            day=day,
+            user_id=user.id,
+            tz_name=db_user.time_zone,
+        )
+        await query.edit_message_text("📅 Выберите дату события:", reply_markup=reply_markup)
+
+    elif data.startswith("cal_month_"):
+        _, _, year_str, month_str = data.split("_")
+        year = int(year_str)
+        month = int(month_str)
+
+        reply_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
+        await query.edit_message_text("📅 Выберите дату события:", reply_markup=reply_markup)
+
     elif data.startswith("cal_select_"):
         logger.info("Выбор события cal_select_")
         _, _, year_str, month_str, day_str = data.split("_")
         year = int(year_str)
         month = int(month_str)
-        day = day_str
+        day = int(day_str)
 
         events = await db_controller.get_current_day_events_by_user(
-            user_id=user.id, month=month, year=year, day=int(day), tz_name=db_user.time_zone
+            user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
+        )
+        events_list = await db_controller.get_current_day_events_by_user(
+            user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone, deleted=True
         )
 
         reply_btn_create = InlineKeyboardButton(
-            f"✍️ Создать событие на {int(day):02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
+            f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
         )
         reply_btn_delete = InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}")
         action_row = [reply_btn_create]
         formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
 
         delete_row = []
+        event_buttons = []
         if events:
             delete_row.append(reply_btn_delete)
-            _events = f"📅 События на <b>{formatted_date}</b>:\n{events}"
+            for ev_text, ev_id, _ in events_list:
+                btn_text = str(ev_text).replace("\n", " — ").strip()
+                if btn_text:
+                    event_buttons.append([InlineKeyboardButton(btn_text, callback_data=f"edit_event_{ev_id}")])
+            _events = f"📅 События на <b>{formatted_date}</b>:"
         else:
             _events = f"📅 Вы выбрали дату: <b>{formatted_date}</b>"
 
-        calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row] + [delete_row])
+        calendar_markup = await generate_week_calendar(year=year, month=month, day=day, user_id=user.id, tz_name=db_user.time_zone)
+        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + event_buttons + [action_row] + [delete_row])
         await query.edit_message_text(text=_events, reply_markup=reply_markup, parse_mode="HTML")
 
     elif data == "cal_ignore":

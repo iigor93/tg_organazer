@@ -8,6 +8,7 @@ from timezonefinder import TimezoneFinder
 
 from database.db_controller import db_controller
 from entities import TgUser
+from handlers.cal import show_calendar
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +110,8 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.exception("OFFSET ERR: ")
         pass
 
-    await show_main_menu(update.message, add_text="Спасибо за геолокацию!")
+    await show_main_menu_keyboard(update.message)
+    await show_calendar(update, context)
 
 
 async def handle_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -118,7 +120,14 @@ async def handle_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     user = update.effective_user
     logger.info(f"Пользователь {user.id} ({user.first_name}) пропустил геолокацию")
 
-    await show_main_menu(update.message, add_text="Ок, продолжим без геолокации.")
+    await show_main_menu_keyboard(update.message)
+    await show_calendar(update, context)
+
+
+async def show_main_menu_keyboard(message: Message) -> None:
+    keyboard = [["📅 Показать календарь"], ["🗓 Ближайшие события"]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+    await message.reply_text("Меню:", reply_markup=reply_markup)
 
 
 async def show_main_menu(message: Message, add_text: str | None = None) -> None:
@@ -126,6 +135,6 @@ async def show_main_menu(message: Message, add_text: str | None = None) -> None:
 
     keyboard = [["📅 Показать календарь"], ["🗓 Ближайшие события"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-    text = f"{add_text}\n\nВыберите действие:" if add_text else "Выбери действие:"
+    text = f"{add_text}\n\nВыберите действие:" if add_text else "Выберите действие:"
 
     await message.reply_text(text=text, reply_markup=reply_markup)

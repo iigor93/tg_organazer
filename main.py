@@ -21,6 +21,7 @@ from handlers.events import (
     generate_time_selector,
     get_event_constructor,
     handle_create_event_callback,
+    handle_edit_event_callback,
     handle_delete_event_callback,
     handle_event_participants_callback,
     handle_participants_callback,
@@ -218,6 +219,7 @@ def main() -> None:
     # Создание\удаление события
     application.add_handler(CallbackQueryHandler(handle_time_callback, pattern="^time_"))
     application.add_handler(CallbackQueryHandler(handle_create_event_callback, pattern="^create_event_"))
+    application.add_handler(CallbackQueryHandler(handle_edit_event_callback, pattern="^edit_event_"))
     application.add_handler(CallbackQueryHandler(handle_delete_event_callback, pattern="^delete_event_"))
     application.add_handler(CallbackQueryHandler(handle_participants_callback, pattern="^participants_"))
     application.add_handler(CallbackQueryHandler(handle_team_callback, pattern="^team_"))

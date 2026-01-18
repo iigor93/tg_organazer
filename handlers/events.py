@@ -1,5 +1,6 @@
 import datetime
 import logging
+import re
 from datetime import date, time
 
 import telegram
@@ -154,8 +155,12 @@ async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.edit_message_reply_markup(reply_markup=reply_markup)
 
 
+
+def escape_markdown_v2(value: str) -> str:
+    return re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\1", value)
+
 def get_event_constructor(
-    event: Event, year: int | None = None, month: int | None = None, day: int | None = None, has_participants: bool = False
+    event: Event, year: int | None = None, month: int | None = None, day: int | None = None, has_participants: bool = False, show_details: bool = False
 ):
     start_time = "Начало *"
     stop_time = "Окончание"
@@ -178,11 +183,31 @@ def get_event_constructor(
             participants += f" ({len_participants})"
 
         if event.start_time and event.description:
-            show_create_btn = True
+            if not event.stop_time or event.stop_time >= event.start_time:
+                show_create_btn = True
 
     formatted_date = f"{day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года"
-    text = f"✍️ Создать событие на *{formatted_date}* \n\n\\* \\- поля обязательные для заполнения"
-
+    if show_details:
+        date_text = f"{day} {MONTH_NAMES[int(month) - 1].lower()} {year}"
+        start_text = event.start_time.strftime("%H:%M") if event.start_time else "—"
+        stop_text = event.stop_time.strftime("%H:%M") if event.stop_time else "—"
+        description_text = event.description if event.description else "—"
+        recurrent_text = event.recurrent.get_name() if event.recurrent else "—"
+        participant_names = []
+        if event.participants:
+            participant_names = [event.all_user_participants.get(tg_id, str(tg_id)) for tg_id in event.participants]
+        participants_text = ", ".join(participant_names) if participant_names else "—"
+        text = (
+            "📅 Дата: " + escape_markdown_v2(date_text) + "\n"
+            "⏰ Начало: " + escape_markdown_v2(start_text) + "\n"
+            "⏳ Окончание: " + escape_markdown_v2(stop_text) + "\n"
+            "📝 Описание: " + escape_markdown_v2(description_text) + "\n"
+            "🔁 Повтор: " + escape_markdown_v2(recurrent_text) + "\n"
+            "👥 Участники: " + escape_markdown_v2(participants_text) + "\n\n"
+            "\* \- поля обязательные для заполнения"
+        )
+    else:
+        text = f"✍️ Создать событие на *{formatted_date}* \n\n\* \- поля обязательные для заполнения"
     start_btn = InlineKeyboardButton(text=start_time, callback_data=f"create_event_start_{year}_{month}_{day}")
     stop_btn = InlineKeyboardButton(text=stop_time, callback_data=f"create_event_stop_{year}_{month}_{day}")
     description_btn = InlineKeyboardButton(text=description, callback_data=f"create_event_description_{year}_{month}_{day}")
@@ -234,6 +259,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
         try:
             _, _, _, year, month, day = data.split("_")
+            context.chat_data.pop("edit_event_id", None)
             event = Event(event_date=datetime.datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d"), tg_id=update.effective_chat.id)
             context.chat_data["event"] = event
         except:  # noqa
@@ -244,7 +270,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         context.chat_data["event"].all_user_participants = {tg_id: name for tg_id, (name, _) in participants.items()}
 
         has_participants = bool(event.all_user_participants)
-        text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants)
+        text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants, show_details=bool(context.chat_data.get("edit_event_id")))
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
     elif data.startswith("create_event_start_"):
@@ -268,21 +294,17 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         if event and event.stop_time:
             hours = event.stop_time.hour
             minutes = event.stop_time.minute
-        elif event and not event.stop_time:
-            event.stop_time = datetime.datetime.strptime("12:00", "%H:%M").time()
-            context.chat_data["event"] = event
-
-        if event.start_time:
+        elif event and event.start_time:
             hours = event.start_time.hour
             minutes = event.start_time.minute
             hours = int(hours)
             minutes = int(minutes)
-
             event.stop_time = datetime.datetime.strptime(f"{hours:02d}:{minutes:02d}", "%H:%M").time()
             context.chat_data["event"] = event
-
-            text += f"\n\n (уже задано время начала события {hours:02d}:{minutes:02d})"
-
+            text += f"\n\n (?? ?????????? ????????? ??????? {hours:02d}:{minutes:02d})"
+        elif event and not event.stop_time:
+            event.stop_time = datetime.datetime.strptime("12:00", "%H:%M").time()
+            context.chat_data["event"] = event
         reply_markup = generate_time_selector(hours=int(hours), minutes=int(minutes), time_type="stop")
         await query.edit_message_text(text=text, reply_markup=reply_markup)
 
@@ -301,7 +323,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         context.chat_data["event"] = event
 
         has_participants = bool(event.all_user_participants)
-        text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants)
+        text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants, show_details=bool(context.chat_data.get("edit_event_id")))
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
     elif data.startswith("create_event_recurrent_"):
@@ -327,7 +349,11 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         reply_markup = InlineKeyboardMarkup(list_btn)
         await query.edit_message_text(text="Добавь пользователей к событию", reply_markup=reply_markup)
     elif data.startswith("create_event_save_to_db"):
-        event_id = await db_controller.save_event(event=event, tz_name=db_user.time_zone)
+        edit_event_id = context.chat_data.pop("edit_event_id", None)
+        if edit_event_id:
+            event_id = await db_controller.update_event(event_id=edit_event_id, event=event, tz_name=db_user.time_zone)
+        else:
+            event_id = await db_controller.save_event(event=event, tz_name=db_user.time_zone)
 
         context.chat_data.pop("team_participants", None)
         context.chat_data.pop("team_selected", None)
@@ -383,6 +409,37 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
                 btn = [[InlineKeyboardButton("Не добавлять", callback_data=cancel_data)]]
                 reply_markup = InlineKeyboardMarkup(btn)
                 await bot.send_message(chat_id=user, text=text, reply_markup=reply_markup)
+
+
+async def handle_edit_event_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("handle_edit_event_callback")
+    query = update.callback_query
+    await query.answer()
+
+    user = update.effective_chat
+    tg_user = TgUser.model_validate(user)
+    db_user = await db_controller.save_update_user(tg_user=tg_user)
+    logger.info(f"*** DB user: {db_user}")
+
+    parts = query.data.split("_")
+    event_id = int(parts[-1])
+
+    event = await db_controller.get_event_by_id(event_id=event_id, tz_name=db_user.time_zone)
+    if not event:
+        await query.edit_message_text(text="Событие не найдено")
+        return
+
+    context.chat_data["event"] = event
+    context.chat_data["edit_event_id"] = event_id
+
+    participants = await db_controller.get_participants_with_status(tg_id=user.id, include_inactive=True)
+    context.chat_data["participants_status"] = {tg_id: is_active for tg_id, (_, is_active) in participants.items()}
+    event.all_user_participants = {tg_id: name for tg_id, (name, _) in participants.items()}
+
+    year, month, day = event.get_date()
+    has_participants = bool(event.all_user_participants)
+    text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants, show_details=bool(context.chat_data.get("edit_event_id")))
+    await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
 
 async def show_upcoming_events(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
