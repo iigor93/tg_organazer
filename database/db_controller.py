@@ -587,18 +587,16 @@ class DBController:
                 start_time=new_start_at.time(),
                 start_at=new_start_at,
                 stop_at=new_stop_at,
-                single_event=event.single_event,
-                daily=event.daily,
-                weekly=new_start_at.weekday() if event.weekly is not None else None,
-                monthly=new_start_at.day if event.monthly is not None else None,
-                annual_day=new_start_at.day if event.annual_day is not None else None,
-                annual_month=new_start_at.month if event.annual_month is not None else None,
+                single_event=True,
+                daily=False,
+                weekly=None,
+                monthly=None,
+                annual_day=None,
+                annual_month=None,
                 tg_id=event.tg_id,
             )
 
             session.add(new_event)
-            await session.flush()
-            await session.delete(event)
             await session.commit()
             await session.refresh(new_event)
 
