@@ -10,7 +10,7 @@ from sqlalchemy.orm import aliased
 
 import config
 from config import NEAREST_EVENTS_DAYS
-from database.models.event_models import CanceledEvent, DbEvent
+from database.models.event_models import CanceledEvent, DbEvent, EventParticipant
 from database.models.user_model import User as DB_User
 from database.models.user_model import UserRelation
 from database.session import AsyncSessionLocal
@@ -106,6 +106,25 @@ class DBController:
             participants = (await session.execute(query)).scalars().all()
 
             return {item.tg_id: (item.first_name, bool(item.is_active)) for item in participants}
+
+    @staticmethod
+    async def get_event_participants(event_id: int) -> list[int]:
+        async with AsyncSessionLocal() as session:
+            query = select(EventParticipant.participant_tg_id).where(EventParticipant.event_id == int(event_id))
+            return list((await session.execute(query)).scalars().all())
+
+    @staticmethod
+    async def set_event_participants(event_id: int, participant_ids: list[int]) -> None:
+        async with AsyncSessionLocal() as session:
+            await session.execute(delete(EventParticipant).where(EventParticipant.event_id == int(event_id)))
+            if participant_ids:
+                session.add_all(
+                    [
+                        EventParticipant(event_id=int(event_id), participant_tg_id=int(participant_id))
+                        for participant_id in participant_ids
+                    ]
+                )
+            await session.commit()
 
     @staticmethod
     async def delete_participants(current_tg_id: int, related_tg_ids: list[int]) -> int:

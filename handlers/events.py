@@ -392,6 +392,8 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         else:
             event_id = await db_controller.save_event(event=event, tz_name=db_user.time_zone)
 
+        await db_controller.set_event_participants(event_id=event_id, participant_ids=event.participants)
+
         context.chat_data.pop("team_participants", None)
         context.chat_data.pop("team_selected", None)
         context.chat_data.pop("event", None)
@@ -422,6 +424,8 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
             for user in event.participants:
                 new_event_id = await db_controller.resave_event_to_participant(event_id=event_id, user_id=user)
+                if new_event_id:
+                    await db_controller.set_event_participants(event_id=new_event_id, participant_ids=event.participants)
                 creator_id = update.effective_chat.id if update.effective_chat else None
                 cancel_data = f"create_participant_event_cancel_{new_event_id}"
                 if creator_id:
@@ -448,6 +452,8 @@ async def handle_edit_event_callback(update: Update, context: ContextTypes.DEFAU
     if not event:
         await query.edit_message_text(text="Событие не найдено")
         return
+
+    event.participants = await db_controller.get_event_participants(event_id=event_id)
 
     context.chat_data["event"] = event
     context.chat_data["edit_event_id"] = event_id
