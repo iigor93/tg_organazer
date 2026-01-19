@@ -227,6 +227,42 @@ def get_event_constructor(
     return text, reply_markup
 
 
+async def start_event_creation(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    year: int,
+    month: int,
+    day: int,
+) -> None:
+    context.chat_data.pop("team_participants", None)
+    context.chat_data.pop("team_selected", None)
+    context.chat_data.pop("participants_status", None)
+    context.chat_data.pop("time_picker_message_id", None)
+    context.chat_data.pop("time_picker_chat_id", None)
+    context.chat_data.pop("await_time_input", None)
+    context.chat_data.pop("time_input_prompt_message_id", None)
+    context.chat_data.pop("time_input_prompt_chat_id", None)
+    context.chat_data.pop("edit_event_id", None)
+
+    event = Event(event_date=datetime.datetime.strptime(f"{year}-{month:02d}-{day:02d}", "%Y-%m-%d"), tg_id=update.effective_chat.id)
+    context.chat_data["event"] = event
+
+    participants = await db_controller.get_participants_with_status(tg_id=update.effective_chat.id, include_inactive=True)
+    context.chat_data["participants_status"] = {tg_id: is_active for tg_id, (_, is_active) in participants.items()}
+    context.chat_data["event"].all_user_participants = {tg_id: name for tg_id, (name, _) in participants.items()}
+
+    has_participants = bool(event.all_user_participants)
+    text, reply_markup = get_event_constructor(
+        event=event,
+        year=year,
+        month=month,
+        day=day,
+        has_participants=has_participants,
+        show_details=bool(context.chat_data.get("edit_event_id")),
+    )
+    await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+
+
 async def handle_create_event_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("handle_create_event_callback")
     query = update.callback_query
@@ -248,30 +284,31 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
     logger.info(f"* EVENT: {event}")
 
     if data.startswith("create_event_begin_"):
-        context.chat_data.pop("team_participants", None)
-        context.chat_data.pop("team_selected", None)
-        context.chat_data.pop("participants_status", None)
-        context.chat_data.pop("time_picker_message_id", None)
-        context.chat_data.pop("time_picker_chat_id", None)
-        context.chat_data.pop("await_time_input", None)
-        context.chat_data.pop("time_input_prompt_message_id", None)
-        context.chat_data.pop("time_input_prompt_chat_id", None)
-
-        try:
-            _, _, _, year, month, day = data.split("_")
-            context.chat_data.pop("edit_event_id", None)
-            event = Event(event_date=datetime.datetime.strptime(f"{year}-{month}-{day}", "%Y-%m-%d"), tg_id=update.effective_chat.id)
-            context.chat_data["event"] = event
-        except:  # noqa
-            ...
-
-        participants = await db_controller.get_participants_with_status(tg_id=user.id, include_inactive=True)
-        context.chat_data["participants_status"] = {tg_id: is_active for tg_id, (_, is_active) in participants.items()}
-        context.chat_data["event"].all_user_participants = {tg_id: name for tg_id, (name, _) in participants.items()}
-
-        has_participants = bool(event.all_user_participants)
-        text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants, show_details=bool(context.chat_data.get("edit_event_id")))
-        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+        parts = data.split("_")
+        if len(parts) >= 6:
+            year, month, day = parts[3], parts[4], parts[5]
+            await start_event_creation(
+                update=update,
+                context=context,
+                year=int(year),
+                month=int(month),
+                day=int(day),
+            )
+        else:
+            if not event:
+                event = Event(event_date=datetime.datetime.now().date(), tg_id=update.effective_chat.id)
+                context.chat_data["event"] = event
+            year, month, day = event.get_date()
+            has_participants = bool(event.all_user_participants)
+            text, reply_markup = get_event_constructor(
+                event=event,
+                year=year,
+                month=month,
+                day=day,
+                has_participants=has_participants,
+                show_details=bool(context.chat_data.get("edit_event_id")),
+            )
+            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
     elif data.startswith("create_event_start_"):
         hours = 12
@@ -301,7 +338,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             minutes = int(minutes)
             event.stop_time = datetime.datetime.strptime(f"{hours:02d}:{minutes:02d}", "%H:%M").time()
             context.chat_data["event"] = event
-            text += f"\n\n (?? ?????????? ????????? ??????? {hours:02d}:{minutes:02d})"
+            text += f"\n\n (Время начала события: {hours:02d}:{minutes:02d})"
         elif event and not event.stop_time:
             event.stop_time = datetime.datetime.strptime("12:00", "%H:%M").time()
             context.chat_data["event"] = event
@@ -366,28 +403,11 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         context.chat_data.pop("time_input_prompt_chat_id", None)
 
         year, month, day = event.get_date()
-        events = await db_controller.get_current_day_events_by_user(
-            user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
+        from handlers.cal import build_day_view  # local import to avoid circular dependency
+
+        text, reply_markup = await build_day_view(
+            user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
         )
-        formatted_date = f"{day:02d}.{month:02d}.{year}"
-
-        if events:
-            text = f"Создано новое событие <b>{formatted_date}</b>:\n{events}"
-        else:
-            text = f"Нет событий <b>{formatted_date}</b>"
-
-        from handlers.cal import generate_calendar  # local import to avoid circular dependency
-
-        calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        action_row = [
-            InlineKeyboardButton(
-                f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
-            )
-        ]
-        delete_row = []
-        if events:
-            delete_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
-        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row] + [delete_row])
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
         if event.participants:

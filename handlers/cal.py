@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 import config
@@ -158,10 +159,48 @@ async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
 
 
+async def build_day_view(user_id: int, year: int, month: int, day: int, tz_name: str) -> tuple[str, InlineKeyboardMarkup]:
+    events = await db_controller.get_current_day_events_by_user(
+        user_id=user_id, month=month, year=year, day=day, tz_name=tz_name
+    )
+    events_list = await db_controller.get_current_day_events_by_user(
+        user_id=user_id, month=month, year=year, day=day, tz_name=tz_name, deleted=True
+    )
+
+    reply_btn_create = InlineKeyboardButton(
+        f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
+    )
+    reply_btn_delete = InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}")
+    action_row = [reply_btn_create]
+    formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
+
+    delete_row = []
+    event_buttons = []
+    if events:
+        delete_row.append(reply_btn_delete)
+        for ev_text, ev_id, _ in events_list:
+            btn_text = str(ev_text).replace("\n", " - ").strip()
+            if btn_text:
+                event_buttons.append([InlineKeyboardButton(btn_text, callback_data=f"edit_event_{ev_id}")])
+        text = f"События на <b>{formatted_date}</b>:"
+    else:
+        text = f"Вы выбрали дату: <b>{formatted_date}</b>"
+
+    calendar_markup = await generate_week_calendar(year=year, month=month, day=day, user_id=user_id, tz_name=tz_name)
+    reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + event_buttons + [action_row] + [delete_row])
+    return text, reply_markup
+
+
 async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("handle_calendar_callback")
     query = update.callback_query
-    await query.answer()
+    try:
+        await query.answer()
+    except BadRequest as exc:
+        if "Query is too old" in str(exc) or "query id is invalid" in str(exc):
+            logger.info("Skip expired callback query")
+        else:
+            raise
 
     user = update.effective_chat
     tg_user = TgUser.model_validate(user)
@@ -212,32 +251,16 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
         events = await db_controller.get_current_day_events_by_user(
             user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
         )
-        events_list = await db_controller.get_current_day_events_by_user(
-            user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone, deleted=True
+        if not events:
+            from handlers.events import start_event_creation  # local import to avoid circular dependency
+
+            await start_event_creation(update=update, context=context, year=year, month=month, day=day)
+            return
+
+        text, reply_markup = await build_day_view(
+            user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
         )
-
-        reply_btn_create = InlineKeyboardButton(
-            f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
-        )
-        reply_btn_delete = InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}")
-        action_row = [reply_btn_create]
-        formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
-
-        delete_row = []
-        event_buttons = []
-        if events:
-            delete_row.append(reply_btn_delete)
-            for ev_text, ev_id, _ in events_list:
-                btn_text = str(ev_text).replace("\n", " — ").strip()
-                if btn_text:
-                    event_buttons.append([InlineKeyboardButton(btn_text, callback_data=f"edit_event_{ev_id}")])
-            _events = f"📅 События на <b>{formatted_date}</b>:"
-        else:
-            _events = f"📅 Вы выбрали дату: <b>{formatted_date}</b>"
-
-        calendar_markup = await generate_week_calendar(year=year, month=month, day=day, user_id=user.id, tz_name=db_user.time_zone)
-        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + event_buttons + [action_row] + [delete_row])
-        await query.edit_message_text(text=_events, reply_markup=reply_markup, parse_mode="HTML")
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif data == "cal_ignore":
         pass

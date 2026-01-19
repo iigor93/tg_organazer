@@ -13,11 +13,11 @@ import {
 import { TelegramLoginButton } from './telegram'
 
 const RECURRENCE_LABELS = {
-  never: '???????',
-  daily: '?????????',
-  weekly: '???????????',
-  monthly: '??????????',
-  annual: '????????',
+  never: 'Никогда',
+  daily: 'Ежедневно',
+  weekly: 'Еженедельно',
+  monthly: 'Ежемесячно',
+  annual: 'Ежегодно',
 }
 
 function App() {
@@ -196,14 +196,14 @@ function App() {
         <header className="hero">
           <div>
             <p className="eyebrow">FamPlanner</p>
-            <h1>???????? ????????? ? ???????????</h1>
+            <h1>Планируйте события и напоминания</h1>
             <p className="lead">
-              ???? ????? Telegram, ?????????? ???????, ?????????? ? ???????????.
+              Вход через Telegram, управление событиями, участниками и напоминаниями.
             </p>
           </div>
           <div className="login-card">
-            <h2>????</h2>
-            <p>????? ?????? ???? ? ??????????? ????? Telegram.</p>
+            <h2>Вход</h2>
+            <p>Войдите через Telegram, чтобы продолжить.</p>
             <TelegramLoginButton onAuth={handleTelegramAuth} />
             {error && <div className="error">{error}</div>}
           </div>
@@ -217,22 +217,22 @@ function App() {
       <header className="topbar">
         <div>
           <h1>FamPlanner</h1>
-          <p>????? ??????????, {user?.firstName || user?.username || '????????????'}</p>
+          <p>Добро пожаловать, {user?.firstName || user?.username || 'пользователь'}</p>
         </div>
         <div className="top-actions">
           <button
             className={tab === 'event' ? 'tab active' : 'tab'}
             onClick={() => setTab('event')}
           >
-            ???????
+            События
           </button>
           <button
             className={tab === 'team' ? 'tab active' : 'tab'}
             onClick={() => setTab('team')}
           >
-            ?????????
+            Участники
           </button>
-          {isAdmin && <span className="badge">?????</span>}
+          {isAdmin && <span className="badge">Админ</span>}
         </div>
       </header>
 
@@ -240,15 +240,15 @@ function App() {
         <div className="calendar">
           <div className="calendar-header">
             <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}>
-              ?
+              <
             </button>
             <h2>{monthLabel}</h2>
             <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}>
-              ?
+              >
             </button>
           </div>
           <div className="calendar-grid">
-            {['??', '??', '??', '??', '??', '??', '??'].map((day) => (
+            {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((day) => (
               <div key={day} className="calendar-weekday">
                 {day}
               </div>
@@ -274,19 +274,19 @@ function App() {
             })}
           </div>
           <div className="day-events">
-            <h3>??????? ?? {selectedDate.toLocaleDateString('ru-RU')}</h3>
-            {dayEvents.length === 0 && <p>??????? ???.</p>}
+            <h3>События на {selectedDate.toLocaleDateString('ru-RU')}</h3>
+            {dayEvents.length === 0 && <p>Событий нет.</p>}
             {dayEvents.map((event) => (
               <div key={event.id} className="event-card">
                 <div>
                   <strong>{event.start_time}</strong>
-                  {event.stop_time ? `?${event.stop_time}` : ''}
+                  {event.stop_time ? ` - ${event.stop_time}` : ''}
                   <p>{event.description}</p>
                   {event.recurrent && event.recurrent !== 'never' && (
                     <span className="tag">{RECURRENCE_LABELS[event.recurrent]}</span>
                   )}
                 </div>
-                <button onClick={() => handleDeleteEvent(event.id, event.single_event)}>???????</button>
+                <button onClick={() => handleDeleteEvent(event.id, event.single_event)}>Удалить</button>
               </div>
             ))}
           </div>
@@ -295,9 +295,9 @@ function App() {
         <aside className="panel">
           {tab === 'event' && (
             <form className="event-form" onSubmit={handleCreateEvent}>
-              <h3>??????? ???????</h3>
+              <h3>Новое событие</h3>
               <label>
-                ????
+                Дата
                 <input
                   type="date"
                   value={form.date}
@@ -305,7 +305,7 @@ function App() {
                 />
               </label>
               <label>
-                ??????
+                Повтор
                 <input
                   type="time"
                   value={form.start_time}
@@ -313,7 +313,7 @@ function App() {
                 />
               </label>
               <label>
-                ?????????
+                Окончание
                 <input
                   type="time"
                   value={form.stop_time}
@@ -321,7 +321,7 @@ function App() {
                 />
               </label>
               <label>
-                ????????
+                Создать
                 <textarea
                   rows="3"
                   value={form.description}
@@ -329,7 +329,7 @@ function App() {
                 />
               </label>
               <label>
-                ??????
+                Повтор
                 <select
                   value={form.recurrent}
                   onChange={(e) => setForm({ ...form, recurrent: e.target.value })}
@@ -342,8 +342,8 @@ function App() {
                 </select>
               </label>
               <div className="participants">
-                <p>?????????</p>
-                {participants.length === 0 && <span>??? ??????????? ?????????.</span>}
+                <p>Участники</p>
+                {participants.length === 0 && <span>Нет доступных участников.</span>}
                 {participants.map((p) => (
                   <label key={p.tg_id} className={p.is_active ? '' : 'muted'}>
                     <input
@@ -357,20 +357,20 @@ function App() {
                         setForm({ ...form, participants: next })
                       }}
                     />
-                    {p.first_name || p.tg_id} {!p.is_active && '(?? ? ????)'}
+                    {p.first_name || p.tg_id} {!p.is_active && '(не в боте)'}
                   </label>
                 ))}
               </div>
               <button type="submit" disabled={!form.description}>
-                ?????????
+                Окончание
               </button>
             </form>
           )}
 
           {tab === 'team' && (
             <div className="team-panel">
-              <h3>?????????? ???????????</h3>
-              {participants.length === 0 && <p>?????? ????.</p>}
+              <h3>Управление участниками</h3>
+              {participants.length === 0 && <p>Нет участников.</p>}
               {participants.map((p) => (
                 <label key={p.tg_id} className="team-item">
                   <input
@@ -384,16 +384,16 @@ function App() {
                     }}
                   />
                   <span>{p.first_name || p.tg_id}</span>
-                  {!p.is_active && <em>?? ? ????</em>}
+                  {!p.is_active && <em>не в боте</em>}
                 </label>
               ))}
               <button onClick={handleDeleteParticipants} disabled={!selectedParticipants.length}>
-                ??????? ?????????
+                Удалить участников?
               </button>
             </div>
           )}
 
-          {loading && <div className="loading">????????...</div>}
+          {loading && <div className="loading">Загрузка...</div>}
           {error && <div className="error">{error}</div>}
         </aside>
       </section>

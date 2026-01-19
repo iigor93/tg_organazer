@@ -39,7 +39,7 @@ export function TelegramLoginButton({ onAuth }) {
       {import.meta.env.VITE_TG_BOT_USERNAME ? (
         <div ref={ref} />
       ) : (
-        <p className="muted">????? VITE_TG_BOT_USERNAME ? .env</p>
+        <p className="muted">Укажите VITE_TG_BOT_USERNAME в .env</p>
       )}
     </div>
   )

@@ -1,8 +1,10 @@
+import asyncio
 import datetime
 import logging
 
 from dotenv import load_dotenv
 from telegram import BotCommand, Update
+from telegram.error import BadRequest
 from telegram.ext import (
     ApplicationBuilder,
     CallbackQueryHandler,
@@ -38,6 +40,14 @@ logger = logging.getLogger(__name__)
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if isinstance(context.error, BadRequest):
+        message = str(context.error)
+        if "Message is not modified" in message:
+            logger.info("Skip unchanged message update")
+            return
+        if "Query is too old" in message or "query id is invalid" in message:
+            logger.info("Skip expired callback query")
+            return
     logger.exception("Unhandled error", exc_info=context.error)
 
 
@@ -203,6 +213,12 @@ async def shutdown(app):
 
 
 def main() -> None:
+    # Python 3.14+ doesn't create a default loop in main thread.
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
     application = ApplicationBuilder().token(TOKEN).post_shutdown(shutdown).build()
 
     # start, Получение геолокации и Пропуск геолокации
