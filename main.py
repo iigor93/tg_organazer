@@ -3,6 +3,7 @@ import logging
 
 from dotenv import load_dotenv
 from telegram import BotCommand, Update
+from telegram.error import BadRequest
 from telegram.ext import (
     ApplicationBuilder,
     CallbackQueryHandler,
@@ -22,6 +23,7 @@ from handlers.events import (
     get_event_constructor,
     handle_create_event_callback,
     handle_delete_event_callback,
+    handle_edit_event_callback,
     handle_event_participants_callback,
     handle_participants_callback,
     handle_reschedule_event_callback,
@@ -37,6 +39,14 @@ logger = logging.getLogger(__name__)
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if isinstance(context.error, BadRequest):
+        message = str(context.error)
+        if "Message is not modified" in message:
+            logger.info("Skip unchanged message update")
+            return
+        if "Query is too old" in message or "query id is invalid" in message:
+            logger.info("Skip expired callback query")
+            return
     logger.exception("Unhandled error", exc_info=context.error)
 
 
@@ -218,6 +228,7 @@ def main() -> None:
     # Создание\удаление события
     application.add_handler(CallbackQueryHandler(handle_time_callback, pattern="^time_"))
     application.add_handler(CallbackQueryHandler(handle_create_event_callback, pattern="^create_event_"))
+    application.add_handler(CallbackQueryHandler(handle_edit_event_callback, pattern="^edit_event_"))
     application.add_handler(CallbackQueryHandler(handle_delete_event_callback, pattern="^delete_event_"))
     application.add_handler(CallbackQueryHandler(handle_participants_callback, pattern="^participants_"))
     application.add_handler(CallbackQueryHandler(handle_team_callback, pattern="^team_"))

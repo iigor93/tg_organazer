@@ -23,6 +23,7 @@ class DbEvent(Base):
 
     tg_id = Column(BigInteger, nullable=False, comment="Юзер тг id, кому принадлежит событие")
     canceled_events = relationship("CanceledEvent", back_populates="event", lazy="selectin", uselist=True, cascade="all, delete-orphan")
+    participants = relationship("EventParticipant", back_populates="event", lazy="selectin", uselist=True, cascade="all, delete-orphan")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -35,3 +36,15 @@ class CanceledEvent(Base):
     event_id = Column(Integer, ForeignKey(DbEvent.id, ondelete="CASCADE"))
 
     event = relationship(DbEvent, back_populates="canceled_events")
+
+
+class EventParticipant(Base):
+    __tablename__ = "event_participants"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    event_id = Column(Integer, ForeignKey(DbEvent.id, ondelete="CASCADE"))
+    participant_tg_id = Column(BigInteger, nullable=False, comment="ID участника")
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    event = relationship(DbEvent, back_populates="participants")

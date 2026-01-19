@@ -10,7 +10,7 @@ from sqlalchemy.orm import aliased
 
 import config
 from config import NEAREST_EVENTS_DAYS
-from database.models.event_models import CanceledEvent, DbEvent
+from database.models.event_models import CanceledEvent, DbEvent, EventParticipant
 from database.models.user_model import User as DB_User
 from database.models.user_model import UserRelation
 from database.session import AsyncSessionLocal
@@ -108,6 +108,25 @@ class DBController:
             return {item.tg_id: (item.first_name, bool(item.is_active)) for item in participants}
 
     @staticmethod
+    async def get_event_participants(event_id: int) -> list[int]:
+        async with AsyncSessionLocal() as session:
+            query = select(EventParticipant.participant_tg_id).where(EventParticipant.event_id == int(event_id))
+            return list((await session.execute(query)).scalars().all())
+
+    @staticmethod
+    async def set_event_participants(event_id: int, participant_ids: list[int]) -> None:
+        async with AsyncSessionLocal() as session:
+            await session.execute(delete(EventParticipant).where(EventParticipant.event_id == int(event_id)))
+            if participant_ids:
+                session.add_all(
+                    [
+                        EventParticipant(event_id=int(event_id), participant_tg_id=int(participant_id))
+                        for participant_id in participant_ids
+                    ]
+                )
+            await session.commit()
+
+    @staticmethod
     async def delete_participants(current_tg_id: int, related_tg_ids: list[int]) -> int:
         if not related_tg_ids:
             return 0
@@ -162,6 +181,66 @@ class DBController:
             await session.refresh(new_event)
 
             return new_event.id
+
+    @staticmethod
+    async def get_event_by_id(event_id: int, tz_name: str = config.DEFAULT_TIMEZONE_NAME) -> Event | None:
+        user_tz = ZoneInfo(tz_name)
+        async with AsyncSessionLocal() as session:
+            query = select(DbEvent).where(DbEvent.id == int(event_id))
+            db_event = (await session.execute(query)).scalar_one_or_none()
+            if not db_event:
+                return None
+
+        start_local = db_event.start_at.astimezone(user_tz)
+        stop_local_time = db_event.stop_at.astimezone(user_tz).time() if db_event.stop_at else None
+
+        if db_event.daily:
+            recurrent = Recurrent.daily
+        elif db_event.weekly is not None:
+            recurrent = Recurrent.weekly
+        elif db_event.monthly is not None:
+            recurrent = Recurrent.monthly
+        elif db_event.annual_day is not None:
+            recurrent = Recurrent.annual
+        else:
+            recurrent = Recurrent.never
+
+        return Event(
+            event_date=start_local.date(),
+            description=db_event.description,
+            start_time=start_local.time(),
+            stop_time=stop_local_time,
+            recurrent=recurrent,
+            tg_id=db_event.tg_id,
+        )
+
+    @staticmethod
+    async def update_event(event_id: int, event: Event, tz_name: str = config.DEFAULT_TIMEZONE_NAME) -> int | None:
+        user_tz = ZoneInfo(tz_name)
+        start_datetime_tz = datetime.combine(event.event_date, event.start_time).replace(tzinfo=user_tz).astimezone(timezone.utc)
+
+        stop_datetime_tz = None
+        if event.stop_time:
+            stop_datetime_tz = datetime.combine(event.event_date, event.stop_time).replace(tzinfo=user_tz).astimezone(timezone.utc)
+
+        values = dict(
+            description=event.description,
+            start_time=start_datetime_tz.time(),
+            start_at=start_datetime_tz,
+            stop_at=stop_datetime_tz,
+            single_event=True if event.recurrent == Recurrent.never else False,
+            daily=True if event.recurrent == Recurrent.daily else False,
+            weekly=start_datetime_tz.weekday() if event.recurrent == Recurrent.weekly else None,
+            monthly=start_datetime_tz.day if event.recurrent == Recurrent.monthly else None,
+            annual_day=start_datetime_tz.day if event.recurrent == Recurrent.annual else None,
+            annual_month=start_datetime_tz.month if event.recurrent == Recurrent.annual else None,
+        )
+
+        async with AsyncSessionLocal() as session:
+            update_query = update(DbEvent).where(DbEvent.id == int(event_id)).values(**values).returning(DbEvent.id)
+            updated_id = (await session.execute(update_query)).scalar_one_or_none()
+            await session.commit()
+            return updated_id
 
     @staticmethod
     def get_weekday_days_in_month(year: int, month: int, weekday: int) -> list[int]:
