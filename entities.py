@@ -35,6 +35,7 @@ class Event(BaseModel):
 
     event_date: datetime.date
     description: str | None = None
+    emoji: str | None = None
     start_time: datetime.time | None = None
     stop_time: datetime.time | None = None
     recurrent: Recurrent = Recurrent.never

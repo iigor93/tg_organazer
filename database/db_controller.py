@@ -164,6 +164,7 @@ class DBController:
 
         new_event = DbEvent(
             description=event.description,
+            emoji=event.emoji,
             start_time=start_datetime_tz.time(),
             single_event=True if event.recurrent == Recurrent.never else False,
             daily=True if event.recurrent == Recurrent.daily else False,
@@ -208,6 +209,7 @@ class DBController:
         return Event(
             event_date=start_local.date(),
             description=db_event.description,
+            emoji=db_event.emoji,
             start_time=start_local.time(),
             stop_time=stop_local_time,
             recurrent=recurrent,
@@ -225,6 +227,7 @@ class DBController:
 
         values = dict(
             description=event.description,
+            emoji=event.emoji,
             start_time=start_datetime_tz.time(),
             start_at=start_datetime_tz,
             stop_at=stop_datetime_tz,
@@ -401,6 +404,7 @@ class DBController:
             event_stop_local_time = None
             if event.stop_at:
                 event_stop_local_time = event.stop_at.astimezone(user_tz).time()
+            emoji_prefix = f"{event.emoji} " if event.emoji else ""
             time_range = (
                 f"{event_start_local_dt.time().strftime('%H:%M')}-{event_stop_local_time.strftime('%H:%M')}"
                 if event_stop_local_time
@@ -427,14 +431,14 @@ class DBController:
             if deleted:
                 event_list.append(
                     (
-                        f"{time_range}\n"
+                        f"{emoji_prefix}{time_range}\n"
                         f"{event.description[:20]}",
                         event.id,
                         event.single_event,
                     )
                 )
             else:
-                prefix = f"{time_range} {recurrent}".strip()
+                prefix = f"{emoji_prefix}{time_range} {recurrent}".strip()
                 event_list.append(f"{prefix} - {event.description}")
 
         event_list.sort(key=lambda x: x[0] if isinstance(x, tuple) else x)
@@ -633,6 +637,7 @@ class DBController:
 
             new_event = DbEvent(
                 description=event.description,
+                emoji=event.emoji,
                 start_time=event.start_time,
                 start_at=event.start_at,
                 stop_at=event.stop_at,
