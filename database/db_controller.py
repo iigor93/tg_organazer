@@ -401,6 +401,11 @@ class DBController:
             event_stop_local_time = None
             if event.stop_at:
                 event_stop_local_time = event.stop_at.astimezone(user_tz).time()
+            time_range = (
+                f"{event_start_local_dt.time().strftime('%H:%M')}-{event_stop_local_time.strftime('%H:%M')}"
+                if event_stop_local_time
+                else f"{event_start_local_dt.time().strftime('%H:%M')}"
+            )
 
             if event.daily:
                 recurrent = f"({Recurrent.daily.get_name().lower()})"
@@ -422,19 +427,15 @@ class DBController:
             if deleted:
                 event_list.append(
                     (
-                        f"{event_start_local_dt.time().strftime('%H:%M')}-"
-                        f"{event_stop_local_time.strftime('%H:%M') if event_stop_local_time else ''}\n"
+                        f"{time_range}\n"
                         f"{event.description[:20]}",
                         event.id,
                         event.single_event,
                     )
                 )
             else:
-                event_list.append(
-                    f"{event_start_local_dt.time().strftime('%H:%M')}-"
-                    f"{event_stop_local_time.strftime('%H:%M') if event_stop_local_time else ''} "
-                    f"{recurrent} — {event.description}"
-                )
+                prefix = f"{time_range} {recurrent}".strip()
+                event_list.append(f"{prefix} - {event.description}")
 
         event_list.sort(key=lambda x: x[0] if isinstance(x, tuple) else x)
 

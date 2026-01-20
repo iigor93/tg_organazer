@@ -423,7 +423,8 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             text = (
                 f"{str(update.effective_chat.first_name).title()} добавил событие"
                 f"\n{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year} "
-                f"время {event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
+                f"время {event.start_time.strftime('%H:%M')}"
+                f"{'-' + event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
                 f"\n{event.description}"
             )
 
