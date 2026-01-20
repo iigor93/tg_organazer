@@ -164,6 +164,7 @@ class DBController:
 
         new_event = DbEvent(
             description=event.description,
+            emoji=event.emoji,
             start_time=start_datetime_tz.time(),
             single_event=True if event.recurrent == Recurrent.never else False,
             daily=True if event.recurrent == Recurrent.daily else False,
@@ -208,6 +209,7 @@ class DBController:
         return Event(
             event_date=start_local.date(),
             description=db_event.description,
+            emoji=db_event.emoji,
             start_time=start_local.time(),
             stop_time=stop_local_time,
             recurrent=recurrent,
@@ -225,6 +227,7 @@ class DBController:
 
         values = dict(
             description=event.description,
+            emoji=event.emoji,
             start_time=start_datetime_tz.time(),
             start_at=start_datetime_tz,
             stop_at=stop_datetime_tz,
@@ -401,6 +404,12 @@ class DBController:
             event_stop_local_time = None
             if event.stop_at:
                 event_stop_local_time = event.stop_at.astimezone(user_tz).time()
+            emoji_prefix = f"{event.emoji} " if event.emoji else ""
+            time_range = (
+                f"{event_start_local_dt.time().strftime('%H:%M')}-{event_stop_local_time.strftime('%H:%M')}"
+                if event_stop_local_time
+                else f"{event_start_local_dt.time().strftime('%H:%M')}"
+            )
 
             if event.daily:
                 recurrent = f"({Recurrent.daily.get_name().lower()})"
@@ -422,19 +431,15 @@ class DBController:
             if deleted:
                 event_list.append(
                     (
-                        f"{event_start_local_dt.time().strftime('%H:%M')}-"
-                        f"{event_stop_local_time.strftime('%H:%M') if event_stop_local_time else ''}\n"
+                        f"{emoji_prefix}{time_range}\n"
                         f"{event.description[:20]}",
                         event.id,
                         event.single_event,
                     )
                 )
             else:
-                event_list.append(
-                    f"{event_start_local_dt.time().strftime('%H:%M')}-"
-                    f"{event_stop_local_time.strftime('%H:%M') if event_stop_local_time else ''} "
-                    f"{recurrent} — {event.description}"
-                )
+                prefix = f"{emoji_prefix}{time_range} {recurrent}".strip()
+                event_list.append(f"{prefix} - {event.description}")
 
         event_list.sort(key=lambda x: x[0] if isinstance(x, tuple) else x)
 
@@ -504,15 +509,15 @@ class DBController:
                 _event_start_at_user_tz = event.start_at.astimezone(user_tz)
 
                 if event.single_event is True:
-                    event_list.append({_event_start_at_user_tz: event.description})
+                    event_list.append({_event_start_at_user_tz: (event.description, event.emoji)})
 
                 elif event.daily is True:
                     for _date in range(0, NEAREST_EVENTS_DAYS):
                         _calculated_date = start_local + timedelta(days=_date)
                         if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
                             continue
-                        _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time())
-                        event_list.append({_combined: event.description})
+                        _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time(), tzinfo=user_tz)
+                        event_list.append({_combined: (event.description, event.emoji)})
 
                 elif event.monthly is not None:
                     for _date in range(0, NEAREST_EVENTS_DAYS):
@@ -524,8 +529,8 @@ class DBController:
                             _calculated_date.year, _calculated_date.month, _event_start_at_user_tz.day
                         )
                         if _calculated_date.day == effective_day:
-                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time())
-                            event_list.append({_combined: event.description})
+                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time(), tzinfo=user_tz)
+                            event_list.append({_combined: (event.description, event.emoji)})
 
                 elif event.annual_day is not None:
                     for _date in range(0, NEAREST_EVENTS_DAYS):
@@ -533,8 +538,8 @@ class DBController:
                         if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
                             continue
                         if _event_start_at_user_tz.day == _calculated_date.day and _event_start_at_user_tz.month == _calculated_date.month:
-                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time())
-                            event_list.append({_combined: event.description})
+                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time(), tzinfo=user_tz)
+                            event_list.append({_combined: (event.description, event.emoji)})
                             break
 
                 elif event.weekly is not None:
@@ -543,8 +548,8 @@ class DBController:
                         if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
                             continue
                         if _event_start_at_user_tz.weekday() == _calculated_date.weekday() and _event_start_at_user_tz < _calculated_date:
-                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time())
-                            event_list.append({_combined: event.description})
+                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time(), tzinfo=user_tz)
+                            event_list.append({_combined: (event.description, event.emoji)})
 
             if event_list:
                 event_list = sorted(event_list, key=lambda d: list(d.keys())[0])
@@ -632,6 +637,7 @@ class DBController:
 
             new_event = DbEvent(
                 description=event.description,
+                emoji=event.emoji,
                 start_time=event.start_time,
                 start_at=event.start_at,
                 stop_at=event.stop_at,

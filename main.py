@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import logging
 
@@ -20,10 +21,12 @@ from handlers.cal import handle_calendar_callback, show_calendar
 from handlers.contacts import handle_contact, handle_team_callback, handle_team_command
 from handlers.events import (
     generate_time_selector,
+    format_description,
     get_event_constructor,
     handle_create_event_callback,
     handle_delete_event_callback,
     handle_edit_event_callback,
+    handle_emoji_callback,
     handle_event_participants_callback,
     handle_participants_callback,
     handle_reschedule_event_callback,
@@ -147,7 +150,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         event.description = update.message.text
         context.chat_data["event"] = event
 
-        description_add = f"Добавлено описание к событию <b>{event.get_format_date()}</b>:\n\n{event.description}"
+        description_add = f"Добавлено описание к событию <b>{event.get_format_date()}</b>:\n\n{format_description(event.description)}"
         has_participants = bool(event.all_user_participants)
 
         text, reply_markup = get_event_constructor(event=event, has_participants=has_participants)
@@ -212,6 +215,12 @@ async def shutdown(app):
 
 
 def main() -> None:
+    # Python 3.14+ doesn't create a default loop in main thread.
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
     application = ApplicationBuilder().token(TOKEN).post_shutdown(shutdown).build()
 
     # start, Получение геолокации и Пропуск геолокации
@@ -234,6 +243,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_team_callback, pattern="^team_"))
     application.add_handler(CallbackQueryHandler(handle_event_participants_callback, pattern="^create_participant_event_"))
     application.add_handler(CallbackQueryHandler(handle_reschedule_event_callback, pattern="^reschedule_event_"))
+    application.add_handler(CallbackQueryHandler(handle_emoji_callback, pattern="^emoji_"))
     application.add_handler(MessageHandler(filters.Regex("^🗓 Ближайшие события$"), show_upcoming_events))
 
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))

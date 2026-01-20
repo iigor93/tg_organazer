@@ -121,7 +121,7 @@ async def test_get_nearest_events_contains_single_event(db_session_fixture):
 
     events = await db_controller.get_nearest_events(user_id=1)
 
-    assert any("Soon" in list(item.values())[0] for item in events)
+    assert any("Soon" in list(item.values())[0][0] for item in events)
 
 
 @pytest.mark.asyncio

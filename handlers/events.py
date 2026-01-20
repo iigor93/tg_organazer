@@ -12,6 +12,58 @@ from entities import Event, Recurrent, TgUser
 
 logger = logging.getLogger(__name__)
 
+EMOJI_OPTIONS = [
+    "❤️",
+    "😀",
+    "😡",
+    "☠️",
+    "⚡",
+    "✨",
+    "🎂",
+    "🎮",
+    "✈️",
+    "☎️",
+    "⏰",
+    "💩",
+    "🛠",
+    "💣",
+    "💊",
+    "📩",
+    "📌",
+    "🔔",
+    "📝",
+    "🔎",
+    "🔒",
+    "🔴",
+    "🟠",
+    "🟡",
+    "🟢",
+    "🔵",
+    "🟣",
+    "⚫️",
+    "⚪️",
+    "🟤",
+]
+
+
+def build_emoji_keyboard() -> InlineKeyboardMarkup:
+    keyboard = []
+    row = []
+    for idx, emoji in enumerate(EMOJI_OPTIONS):
+        row.append(InlineKeyboardButton(emoji, callback_data=f"emoji_set_{idx}"))
+        if len(row) == 6:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+    keyboard.append([InlineKeyboardButton("Без эмодзи", callback_data="emoji_clear")])
+    return InlineKeyboardMarkup(keyboard)
+
+
+def format_description(description: str | None) -> str:
+    return description or "Описание *"
+
+
 
 def generate_time_selector(hours: int = 12, minutes: int = 0, time_type: str = "") -> InlineKeyboardMarkup:
     hours = hours % 24
@@ -70,6 +122,46 @@ async def handle_participants_callback(update: Update, context: ContextTypes.DEF
 
     reply_markup = InlineKeyboardMarkup(list_btn)
     await query.edit_message_text(text="Добавь пользователей к событию", reply_markup=reply_markup)
+
+
+
+
+async def handle_emoji_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("handle_emoji_callback")
+
+    query = update.callback_query
+    await query.answer()
+
+    event: Event | None = context.chat_data.get("event")
+    if not event:
+        return
+
+    data = query.data
+    if data == "emoji_open":
+        await query.edit_message_text(text="Выберите эмодзи:", reply_markup=build_emoji_keyboard())
+        return
+
+    if data.startswith("emoji_set_"):
+        _, _, idx_str = data.split("_")
+        idx = int(idx_str)
+        if 0 <= idx < len(EMOJI_OPTIONS):
+            event.emoji = EMOJI_OPTIONS[idx]
+            context.chat_data["event"] = event
+    elif data == "emoji_clear":
+        event.emoji = None
+        context.chat_data["event"] = event
+
+    year, month, day = event.get_date()
+    has_participants = bool(event.all_user_participants)
+    text, reply_markup = get_event_constructor(
+        event=event,
+        year=year,
+        month=month,
+        day=day,
+        has_participants=has_participants,
+        show_details=bool(context.chat_data.get("edit_event_id")),
+    )
+    await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
 
 async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -175,7 +267,7 @@ def get_event_constructor(
 
         start_time = event.start_time.strftime("%H:%M") if event.start_time else start_time
         stop_time = event.stop_time.strftime("%H:%M") if event.stop_time else stop_time
-        description = event.description if event.description else description
+        description = format_description(event.description)
         description = description[:20] + "..." if len(str(description)) > 20 else description
         recurrent = f"{recurrent}: {event.recurrent.get_name()}"
         len_participants = len(event.participants) if event.participants else None
@@ -197,6 +289,7 @@ def get_event_constructor(
         if event.participants:
             participant_names = [event.all_user_participants.get(tg_id, str(tg_id)) for tg_id in event.participants]
         participants_text = ", ".join(participant_names) if participant_names else "—"
+        description_text = format_description(description_text)
         text = (
             "📅 Дата: " + date_text + "\n"
             "⏰ Начало: " + start_text + "\n"
@@ -211,9 +304,10 @@ def get_event_constructor(
     start_btn = InlineKeyboardButton(text=start_time, callback_data=f"create_event_start_{year}_{month}_{day}")
     stop_btn = InlineKeyboardButton(text=stop_time, callback_data=f"create_event_stop_{year}_{month}_{day}")
     description_btn = InlineKeyboardButton(text=description, callback_data=f"create_event_description_{year}_{month}_{day}")
+    emoji_btn = InlineKeyboardButton(text=(event.emoji if event and event.emoji else "Эмодзи"), callback_data="emoji_open")
     recurrent_btn = InlineKeyboardButton(text=recurrent, callback_data=f"create_event_recurrent_{year}_{month}_{day}")
     participants_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_participants_{year}_{month}_{day}")
-    buttons = [[start_btn, stop_btn], [description_btn], [recurrent_btn]]
+    buttons = [[start_btn, stop_btn], [emoji_btn], [description_btn], [recurrent_btn]]
 
     if has_participants:
         buttons.append([participants_btn])
@@ -423,8 +517,9 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             text = (
                 f"{str(update.effective_chat.first_name).title()} добавил событие"
                 f"\n{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year} "
-                f"время {event.start_time.strftime('%H:%M')}-{event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
-                f"\n{event.description}"
+                f"время {event.start_time.strftime('%H:%M')}"
+                f"{'-' + event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
+                f"\n{format_description(event.description)}"
             )
 
             for user in event.participants:
@@ -493,7 +588,14 @@ async def show_upcoming_events(update: Update, context: ContextTypes.DEFAULT_TYP
     if events:
         list_events = ["Ближайшие события:"]
         for _event in events:
-            list_events.append(f"<b>{list(_event.keys())[0].strftime('%d-%m-%Y %H:%M')}</b> - {list(_event.values())[0]}")
+            event_dt = list(_event.keys())[0]
+            value = list(_event.values())[0]
+            description = value[0] if isinstance(value, tuple) else value
+            emoji = value[1] if isinstance(value, tuple) else None
+            date_part = event_dt.strftime('%d-%m-%Y')
+            time_part = event_dt.strftime('%H:%M')
+            emoji_part = f" {emoji}" if emoji else ""
+            list_events.append(f"<b>{date_part}{emoji_part} {time_part}</b> - {description}")
         text = "\n".join(list_events)
     else:
         text = "Ближайшие события не найдены"

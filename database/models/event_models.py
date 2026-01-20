@@ -9,6 +9,7 @@ class DbEvent(Base):
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     description = Column(String(), nullable=False, comment="Описание события")
+    emoji = Column(String(length=8), nullable=True, comment="Эмодзи события")
     start_time = Column(Time, nullable=False, comment="Время начала события в UTC")
 
     start_at = Column(DateTime(timezone=True), nullable=False, comment="Время начала события в UTC")
