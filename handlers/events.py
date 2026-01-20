@@ -1,6 +1,5 @@
 import datetime
 import logging
-import re
 from datetime import date, time
 
 import telegram
@@ -155,12 +154,13 @@ async def handle_time_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.edit_message_reply_markup(reply_markup=reply_markup)
 
 
-
-def escape_markdown_v2(value: str) -> str:
-    return re.sub(r"([_*\[\]()~`>#+\-=|{}.!])", r"\\\1", value)
-
 def get_event_constructor(
-    event: Event, year: int | None = None, month: int | None = None, day: int | None = None, has_participants: bool = False, show_details: bool = False
+    event: Event,
+    year: int | None = None,
+    month: int | None = None,
+    day: int | None = None,
+    has_participants: bool = False,
+    show_details: bool = False,
 ):
     start_time = "Начало *"
     stop_time = "Окончание"
@@ -190,7 +190,7 @@ def get_event_constructor(
     if show_details:
         date_text = f"{day} {MONTH_NAMES[int(month) - 1].lower()} {year}"
         start_text = event.start_time.strftime("%H:%M") if event.start_time else "—"
-        stop_text = event.stop_time.strftime("%H:%M") if event.stop_time else "—"
+        stop_text = event.stop_time.strftime("%H:%M") if event.stop_time else ""
         description_text = event.description if event.description else "—"
         recurrent_text = event.recurrent.get_name() if event.recurrent else "—"
         participant_names = []
@@ -198,16 +198,16 @@ def get_event_constructor(
             participant_names = [event.all_user_participants.get(tg_id, str(tg_id)) for tg_id in event.participants]
         participants_text = ", ".join(participant_names) if participant_names else "—"
         text = (
-            "📅 Дата: " + escape_markdown_v2(date_text) + "\n"
-            "⏰ Начало: " + escape_markdown_v2(start_text) + "\n"
-            "⏳ Окончание: " + escape_markdown_v2(stop_text) + "\n"
-            "📝 Описание: " + escape_markdown_v2(description_text) + "\n"
-            "🔁 Повтор: " + escape_markdown_v2(recurrent_text) + "\n"
-            "👥 Участники: " + escape_markdown_v2(participants_text) + "\n\n"
-            "\* \- поля обязательные для заполнения"
+            "📅 Дата: " + date_text + "\n"
+            "⏰ Начало: " + start_text + "\n"
+            "⏳ Окончание: " + stop_text + "\n"
+            "📝 Описание: " + description_text + "\n"
+            "🔁 Повтор: " + recurrent_text + "\n"
+            "👥 Участники: " + participants_text + "\n\n"
+            "* - поля обязательные для заполнения"
         )
     else:
-        text = f"✍️ Создать событие на *{formatted_date}* \n\n\* \- поля обязательные для заполнения"
+        text = f"✍️ Создать событие на <b>{formatted_date}</b> \n\n* - поля обязательные для заполнения"
     start_btn = InlineKeyboardButton(text=start_time, callback_data=f"create_event_start_{year}_{month}_{day}")
     stop_btn = InlineKeyboardButton(text=stop_time, callback_data=f"create_event_stop_{year}_{month}_{day}")
     description_btn = InlineKeyboardButton(text=description, callback_data=f"create_event_description_{year}_{month}_{day}")
@@ -260,7 +260,7 @@ async def start_event_creation(
         has_participants=has_participants,
         show_details=bool(context.chat_data.get("edit_event_id")),
     )
-    await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+    await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
 
 async def handle_create_event_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -308,7 +308,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
                 has_participants=has_participants,
                 show_details=bool(context.chat_data.get("edit_event_id")),
             )
-            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif data.startswith("create_event_start_"):
         hours = 12
@@ -360,8 +360,15 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         context.chat_data["event"] = event
 
         has_participants = bool(event.all_user_participants)
-        text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants, show_details=bool(context.chat_data.get("edit_event_id")))
-        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+        text, reply_markup = get_event_constructor(
+            event=event,
+            year=year,
+            month=month,
+            day=day,
+            has_participants=has_participants,
+            show_details=bool(context.chat_data.get("edit_event_id")),
+        )
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif data.startswith("create_event_recurrent_"):
         list_btn = []
@@ -407,9 +414,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         year, month, day = event.get_date()
         from handlers.cal import build_day_view  # local import to avoid circular dependency
 
-        text, reply_markup = await build_day_view(
-            user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
-        )
+        text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
         if event.participants:
@@ -464,8 +469,15 @@ async def handle_edit_event_callback(update: Update, context: ContextTypes.DEFAU
 
     year, month, day = event.get_date()
     has_participants = bool(event.all_user_participants)
-    text, reply_markup = get_event_constructor(event=event, year=year, month=month, day=day, has_participants=has_participants, show_details=bool(context.chat_data.get("edit_event_id")))
-    await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+    text, reply_markup = get_event_constructor(
+        event=event,
+        year=year,
+        month=month,
+        day=day,
+        has_participants=has_participants,
+        show_details=bool(context.chat_data.get("edit_event_id")),
+    )
+    await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
 
 async def show_upcoming_events(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
