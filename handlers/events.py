@@ -588,7 +588,14 @@ async def show_upcoming_events(update: Update, context: ContextTypes.DEFAULT_TYP
     if events:
         list_events = ["Ближайшие события:"]
         for _event in events:
-            list_events.append(f"<b>{list(_event.keys())[0].strftime('%d-%m-%Y %H:%M')}</b> - {list(_event.values())[0]}")
+            event_dt = list(_event.keys())[0]
+            value = list(_event.values())[0]
+            description = value[0] if isinstance(value, tuple) else value
+            emoji = value[1] if isinstance(value, tuple) else None
+            date_part = event_dt.strftime('%d-%m-%Y')
+            time_part = event_dt.strftime('%H:%M')
+            emoji_part = f" {emoji}" if emoji else ""
+            list_events.append(f"<b>{date_part}{emoji_part} {time_part}</b> - {description}")
         text = "\n".join(list_events)
     else:
         text = "Ближайшие события не найдены"

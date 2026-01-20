@@ -509,15 +509,15 @@ class DBController:
                 _event_start_at_user_tz = event.start_at.astimezone(user_tz)
 
                 if event.single_event is True:
-                    event_list.append({_event_start_at_user_tz: event.description})
+                    event_list.append({_event_start_at_user_tz: (event.description, event.emoji)})
 
                 elif event.daily is True:
                     for _date in range(0, NEAREST_EVENTS_DAYS):
                         _calculated_date = start_local + timedelta(days=_date)
                         if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
                             continue
-                        _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time())
-                        event_list.append({_combined: event.description})
+                        _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time(), tzinfo=user_tz)
+                        event_list.append({_combined: (event.description, event.emoji)})
 
                 elif event.monthly is not None:
                     for _date in range(0, NEAREST_EVENTS_DAYS):
@@ -529,8 +529,8 @@ class DBController:
                             _calculated_date.year, _calculated_date.month, _event_start_at_user_tz.day
                         )
                         if _calculated_date.day == effective_day:
-                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time())
-                            event_list.append({_combined: event.description})
+                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time(), tzinfo=user_tz)
+                            event_list.append({_combined: (event.description, event.emoji)})
 
                 elif event.annual_day is not None:
                     for _date in range(0, NEAREST_EVENTS_DAYS):
@@ -538,8 +538,8 @@ class DBController:
                         if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
                             continue
                         if _event_start_at_user_tz.day == _calculated_date.day and _event_start_at_user_tz.month == _calculated_date.month:
-                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time())
-                            event_list.append({_combined: event.description})
+                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time(), tzinfo=user_tz)
+                            event_list.append({_combined: (event.description, event.emoji)})
                             break
 
                 elif event.weekly is not None:
@@ -548,8 +548,8 @@ class DBController:
                         if _calculated_date.date() in [_ev.cancel_date for _ev in event.canceled_events]:
                             continue
                         if _event_start_at_user_tz.weekday() == _calculated_date.weekday() and _event_start_at_user_tz < _calculated_date:
-                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time())
-                            event_list.append({_combined: event.description})
+                            _combined = datetime.combine(_calculated_date.date(), _event_start_at_user_tz.time(), tzinfo=user_tz)
+                            event_list.append({_combined: (event.description, event.emoji)})
 
             if event_list:
                 event_list = sorted(event_list, key=lambda d: list(d.keys())[0])
