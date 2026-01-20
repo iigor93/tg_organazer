@@ -147,12 +147,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         event.description = update.message.text
         context.chat_data["event"] = event
 
-        description_add = f"Добавлено описание к событию *{event.get_format_date()}*:\n\n{event.description}"
+        description_add = f"Добавлено описание к событию <b>{event.get_format_date()}</b>:\n\n{event.description}"
         has_participants = bool(event.all_user_participants)
 
         text, reply_markup = get_event_constructor(event=event, has_participants=has_participants)
         text = description_add + "\n" + text
-        await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+        await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
         # получаем кнопки
         prompt_message_id = None

@@ -108,9 +108,7 @@ async def generate_week_calendar(
         event_dict = event_dicts[(day_date.year, day_date.month)]
         number_events = event_dict.get(day_date.day)
         show_day = f"{day_date.day}{to_superscript(number_events)}" if number_events else day_date.day
-        week_row.append(
-            InlineKeyboardButton(str(show_day), callback_data=f"cal_select_{day_date.year}_{day_date.month}_{day_date.day}")
-        )
+        week_row.append(InlineKeyboardButton(str(show_day), callback_data=f"cal_select_{day_date.year}_{day_date.month}_{day_date.day}"))
     keyboard.append(week_row)
 
     return InlineKeyboardMarkup(keyboard)
@@ -155,14 +153,12 @@ async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_text(
         "📅 Выберите дату события:",
         reply_markup=reply_markup,
-        parse_mode="MarkdownV2",
+        parse_mode="HTML",
     )
 
 
 async def build_day_view(user_id: int, year: int, month: int, day: int, tz_name: str) -> tuple[str, InlineKeyboardMarkup]:
-    events = await db_controller.get_current_day_events_by_user(
-        user_id=user_id, month=month, year=year, day=day, tz_name=tz_name
-    )
+    events = await db_controller.get_current_day_events_by_user(user_id=user_id, month=month, year=year, day=day, tz_name=tz_name)
     events_list = await db_controller.get_current_day_events_by_user(
         user_id=user_id, month=month, year=year, day=day, tz_name=tz_name, deleted=True
     )
@@ -257,9 +253,7 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
             await start_event_creation(update=update, context=context, year=year, month=month, day=day)
             return
 
-        text, reply_markup = await build_day_view(
-            user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
-        )
+        text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif data == "cal_ignore":
