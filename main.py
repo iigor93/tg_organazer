@@ -149,21 +149,31 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         event = context.chat_data.get("event")
         event.description = update.message.text
         context.chat_data["event"] = event
-
-        description_add = f"Добавлено описание к событию <b>{event.get_format_date()}</b>:\n\n{format_description(event.description)}"
         has_participants = bool(event.all_user_participants)
 
         text, reply_markup = get_event_constructor(event=event, has_participants=has_participants)
-        text = description_add + "\n" + text
-        await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
-
-        # получаем кнопки
+        target_message_id = None
+        target_chat_id = None
         prompt_message_id = None
         prompt_chat_id = None
         if isinstance(await_event_description, dict):
+            target_message_id = await_event_description.get("message_id")
+            target_chat_id = await_event_description.get("chat_id")
             prompt_message_id = await_event_description.get("prompt_message_id")
             prompt_chat_id = await_event_description.get("prompt_chat_id")
-        context.chat_data.pop("await_event_description")
+        if target_message_id and target_chat_id:
+            await context.bot.edit_message_text(
+                chat_id=target_chat_id,
+                message_id=target_message_id,
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode="HTML",
+            )
+        else:
+            await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
+
+        # получаем кнопки
+        context.chat_data.pop("await_event_description", None)
 
         if update.message:
             try:
