@@ -440,12 +440,23 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text=text, reply_markup=reply_markup)
 
     elif data.startswith("create_event_description_"):
-        # context.chat_data["await_event_description"] = True
-        # await query.message.reply_text(text="Опиши, что будет в событии:")
-        message = await query.message.reply_text(text="Опиши, что будет в событии:")
+        target_message_id = query.message.message_id if query.message else None
+        target_chat_id = query.message.chat_id if query.message else None
+        prompt_message_id = None
+        prompt_chat_id = None
+        if query.message:
+            message = await query.message.reply_text(text="Опиши, что будет в событии:")
+            prompt_message_id = message.message_id
+            prompt_chat_id = message.chat_id
+        elif update.effective_chat:
+            message = await context.bot.send_message(chat_id=update.effective_chat.id, text="Опиши, что будет в событии:")
+            prompt_message_id = message.message_id
+            prompt_chat_id = message.chat_id
         context.chat_data["await_event_description"] = {
-            "prompt_message_id": message.message_id,
-            "prompt_chat_id": message.chat_id,
+            "message_id": target_message_id,
+            "chat_id": target_chat_id,
+            "prompt_message_id": prompt_message_id,
+            "prompt_chat_id": prompt_chat_id,
         }
 
     elif data.startswith("create_event_save_recurrent_"):
