@@ -144,6 +144,20 @@ npm install
 npm run dev
 ```
 
+Web app capabilities:
+- month calendar with per-day counts;
+- day view for the selected date;
+- create events with time, recurrence, and participants;
+- delete events (including canceling a single recurrence);
+- participant management with inactive status labels.
+
+Bot-only features (not available in the web app):
+- event emojis;
+- event editing;
+- upcoming events list;
+- reschedule by +1 hour / next day from reminders;
+- week navigation in the calendar.
+
 Environment notes:
 - `TG_BOT_TOKEN` is required in `api/.env` for Telegram login signature checks.
 - `VITE_TG_BOT_USERNAME` must match your bot username for the login widget.

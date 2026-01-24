@@ -240,11 +240,11 @@ function App() {
         <div className="calendar">
           <div className="calendar-header">
             <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}>
-              <
+              {'<'}
             </button>
             <h2>{monthLabel}</h2>
             <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}>
-              >
+              {'>'}
             </button>
           </div>
           <div className="calendar-grid">
