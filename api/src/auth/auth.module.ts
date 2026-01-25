@@ -17,7 +17,7 @@ import { AuthService } from './auth.service';
       useFactory: (config: ConfigService) => ({
         secret: config.get<string>('JWT_SECRET') ?? 'dev-secret',
         signOptions: {
-          expiresIn: config.get<string>('JWT_EXPIRES') ?? '7d',
+          expiresIn: (config.get<string>('JWT_EXPIRES') ?? '7d') as unknown as string | number,
         },
       }),
     }),
