@@ -193,210 +193,214 @@ function App() {
   if (!token) {
     return (
       <div className="app">
-        <header className="hero">
-          <div>
-            <p className="eyebrow">FamPlanner</p>
-            <h1>Планируйте события и напоминания</h1>
-            <p className="lead">
-              Вход через Telegram, управление событиями, участниками и напоминаниями.
-            </p>
-          </div>
-          <div className="login-card">
-            <h2>Вход</h2>
-            <p>Войдите через Telegram, чтобы продолжить.</p>
-            <TelegramLoginButton onAuth={handleTelegramAuth} />
-            {error && <div className="error">{error}</div>}
-          </div>
-        </header>
+        <div className="board hero-board">
+          <header className="hero">
+            <div>
+              <p className="eyebrow">Семейный планировщик</p>
+              <h1>Планируйте события и напоминания</h1>
+              <p className="lead">
+                Вход через Telegram, управление событиями, участниками и напоминаниями.
+              </p>
+            </div>
+            <div className="login-card">
+              <h2>Вход</h2>
+              <p>Войдите через Telegram, чтобы продолжить.</p>
+              <TelegramLoginButton onAuth={handleTelegramAuth} />
+              {error && <div className="error">{error}</div>}
+            </div>
+          </header>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="app">
-      <header className="topbar">
-        <div>
-          <h1>FamPlanner</h1>
-          <p>Добро пожаловать, {user?.firstName || user?.username || 'пользователь'}</p>
-        </div>
-        <div className="top-actions">
-          <button
-            className={tab === 'event' ? 'tab active' : 'tab'}
-            onClick={() => setTab('event')}
-          >
-            События
-          </button>
-          <button
-            className={tab === 'team' ? 'tab active' : 'tab'}
-            onClick={() => setTab('team')}
-          >
-            Участники
-          </button>
-          {isAdmin && <span className="badge">Админ</span>}
-        </div>
-      </header>
-
-      <section className="layout">
-        <div className="calendar">
-          <div className="calendar-header">
-            <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}>
-              {'<'}
+      <div className="board">
+        <header className="topbar">
+          <div>
+            <h1>Семейный планировщик</h1>
+            <p>Добро пожаловать, {user?.firstName || user?.username || 'пользователь'}</p>
+          </div>
+          <div className="top-actions">
+            <button
+              className={tab === 'event' ? 'tab active' : 'tab'}
+              onClick={() => setTab('event')}
+            >
+              События
             </button>
-            <h2>{monthLabel}</h2>
-            <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}>
-              {'>'}
+            <button
+              className={tab === 'team' ? 'tab active' : 'tab'}
+              onClick={() => setTab('team')}
+            >
+              Участники
             </button>
+            {isAdmin && <span className="badge">Админ</span>}
           </div>
-          <div className="calendar-grid">
-            {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((day) => (
-              <div key={day} className="calendar-weekday">
-                {day}
-              </div>
-            ))}
-            {calendarCells.map((date, idx) => {
-              if (!date) {
-                return <div key={`empty-${idx}`} className="calendar-cell empty" />
-              }
-              const day = date.getDate()
-              const count = monthData[day] || 0
-              const isSelected =
-                selectedDate && date.toDateString() === selectedDate.toDateString()
-              return (
-                <button
-                  key={date.toISOString()}
-                  className={`calendar-cell ${isSelected ? 'selected' : ''}`}
-                  onClick={() => setSelectedDate(date)}
-                >
-                  <span>{day}</span>
-                  {count > 0 && <span className="count">{count}</span>}
-                </button>
-              )
-            })}
-          </div>
-          <div className="day-events">
-            <h3>События на {selectedDate.toLocaleDateString('ru-RU')}</h3>
-            {dayEvents.length === 0 && <p>Событий нет.</p>}
-            {dayEvents.map((event) => (
-              <div key={event.id} className="event-card">
-                <div>
-                  <strong>{event.start_time}</strong>
-                  {event.stop_time ? ` - ${event.stop_time}` : ''}
-                  <p>{event.description}</p>
-                  {event.recurrent && event.recurrent !== 'never' && (
-                    <span className="tag">{RECURRENCE_LABELS[event.recurrent]}</span>
-                  )}
-                </div>
-                <button onClick={() => handleDeleteEvent(event.id, event.single_event)}>Удалить</button>
-              </div>
-            ))}
-          </div>
-        </div>
+        </header>
 
-        <aside className="panel">
-          {tab === 'event' && (
-            <form className="event-form" onSubmit={handleCreateEvent}>
-              <h3>Новое событие</h3>
-              <label>
-                Дата
-                <input
-                  type="date"
-                  value={form.date}
-                  onChange={(e) => setForm({ ...form, date: e.target.value })}
-                />
-              </label>
-              <label>
-                Повтор
-                <input
-                  type="time"
-                  value={form.start_time}
-                  onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-                />
-              </label>
-              <label>
-                Окончание
-                <input
-                  type="time"
-                  value={form.stop_time}
-                  onChange={(e) => setForm({ ...form, stop_time: e.target.value })}
-                />
-              </label>
-              <label>
-                Создать
-                <textarea
-                  rows="3"
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                />
-              </label>
-              <label>
-                Повтор
-                <select
-                  value={form.recurrent}
-                  onChange={(e) => setForm({ ...form, recurrent: e.target.value })}
-                >
-                  {Object.entries(RECURRENCE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="participants">
-                <p>Участники</p>
-                {participants.length === 0 && <span>Нет доступных участников.</span>}
-                {participants.map((p) => (
-                  <label key={p.tg_id} className={p.is_active ? '' : 'muted'}>
-                    <input
-                      type="checkbox"
-                      checked={form.participants.includes(p.tg_id)}
-                      disabled={!p.is_active}
-                      onChange={(e) => {
-                        const next = e.target.checked
-                          ? [...form.participants, p.tg_id]
-                          : form.participants.filter((id) => id !== p.tg_id)
-                        setForm({ ...form, participants: next })
-                      }}
-                    />
-                    {p.first_name || p.tg_id} {!p.is_active && '(не в боте)'}
-                  </label>
-                ))}
-              </div>
-              <button type="submit" disabled={!form.description}>
-                Окончание
+        <section className="layout">
+          <div className="calendar">
+            <div className="calendar-header">
+              <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}>
+                {'<'}
               </button>
-            </form>
-          )}
-
-          {tab === 'team' && (
-            <div className="team-panel">
-              <h3>Управление участниками</h3>
-              {participants.length === 0 && <p>Нет участников.</p>}
-              {participants.map((p) => (
-                <label key={p.tg_id} className="team-item">
-                  <input
-                    type="checkbox"
-                    checked={selectedParticipants.includes(p.tg_id)}
-                    onChange={(e) => {
-                      const next = e.target.checked
-                        ? [...selectedParticipants, p.tg_id]
-                        : selectedParticipants.filter((id) => id !== p.tg_id)
-                      setSelectedParticipants(next)
-                    }}
-                  />
-                  <span>{p.first_name || p.tg_id}</span>
-                  {!p.is_active && <em>не в боте</em>}
-                </label>
-              ))}
-              <button onClick={handleDeleteParticipants} disabled={!selectedParticipants.length}>
-                Удалить участников?
+              <h2>{monthLabel}</h2>
+              <button onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}>
+                {'>'}
               </button>
             </div>
-          )}
+            <div className="calendar-grid">
+              {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((day) => (
+                <div key={day} className="calendar-weekday">
+                  {day}
+                </div>
+              ))}
+              {calendarCells.map((date, idx) => {
+                if (!date) {
+                  return <div key={`empty-${idx}`} className="calendar-cell empty" />
+                }
+                const day = date.getDate()
+                const count = monthData[day] || 0
+                const isSelected =
+                  selectedDate && date.toDateString() === selectedDate.toDateString()
+                return (
+                  <button
+                    key={date.toISOString()}
+                    className={`calendar-cell ${isSelected ? 'selected' : ''}`}
+                    onClick={() => setSelectedDate(date)}
+                  >
+                    <span>{day}</span>
+                    {count > 0 && <span className="count">{count}</span>}
+                  </button>
+                )
+              })}
+            </div>
+            <div className="day-events">
+              <h3>События на {selectedDate.toLocaleDateString('ru-RU')}</h3>
+              {dayEvents.length === 0 && <p>Событий нет.</p>}
+              {dayEvents.map((event) => (
+                <div key={event.id} className="event-card">
+                  <div>
+                    <strong>{event.start_time}</strong>
+                    {event.stop_time ? ` - ${event.stop_time}` : ''}
+                    <p>{event.description}</p>
+                    {event.recurrent && event.recurrent !== 'never' && (
+                      <span className="tag">{RECURRENCE_LABELS[event.recurrent]}</span>
+                    )}
+                  </div>
+                  <button onClick={() => handleDeleteEvent(event.id, event.single_event)}>Удалить</button>
+                </div>
+              ))}
+            </div>
+          </div>
 
-          {loading && <div className="loading">Загрузка...</div>}
-          {error && <div className="error">{error}</div>}
-        </aside>
-      </section>
+          <aside className="panel">
+            {tab === 'event' && (
+              <form className="event-form" onSubmit={handleCreateEvent}>
+                <h3>Новое событие</h3>
+                <label>
+                  Дата
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Начало
+                  <input
+                    type="time"
+                    value={form.start_time}
+                    onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Окончание
+                  <input
+                    type="time"
+                    value={form.stop_time}
+                    onChange={(e) => setForm({ ...form, stop_time: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Описание
+                  <textarea
+                    rows="3"
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Повтор
+                  <select
+                    value={form.recurrent}
+                    onChange={(e) => setForm({ ...form, recurrent: e.target.value })}
+                  >
+                    {Object.entries(RECURRENCE_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="participants">
+                  <p>Участники</p>
+                  {participants.length === 0 && <span>Нет доступных участников.</span>}
+                  {participants.map((p) => (
+                    <label key={p.tg_id} className={p.is_active ? '' : 'muted'}>
+                      <input
+                        type="checkbox"
+                        checked={form.participants.includes(p.tg_id)}
+                        disabled={!p.is_active}
+                        onChange={(e) => {
+                          const next = e.target.checked
+                            ? [...form.participants, p.tg_id]
+                            : form.participants.filter((id) => id !== p.tg_id)
+                          setForm({ ...form, participants: next })
+                        }}
+                      />
+                      {p.first_name || p.tg_id} {!p.is_active && '(не в боте)'}
+                    </label>
+                  ))}
+                </div>
+                <button type="submit" disabled={!form.description}>
+                  Создать событие
+                </button>
+              </form>
+            )}
+
+            {tab === 'team' && (
+              <div className="team-panel">
+                <h3>Управление участниками</h3>
+                {participants.length === 0 && <p>Нет участников.</p>}
+                {participants.map((p) => (
+                  <label key={p.tg_id} className="team-item">
+                    <input
+                      type="checkbox"
+                      checked={selectedParticipants.includes(p.tg_id)}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...selectedParticipants, p.tg_id]
+                          : selectedParticipants.filter((id) => id !== p.tg_id)
+                        setSelectedParticipants(next)
+                      }}
+                    />
+                    <span>{p.first_name || p.tg_id}</span>
+                    {!p.is_active && <em>не в боте</em>}
+                  </label>
+                ))}
+                <button onClick={handleDeleteParticipants} disabled={!selectedParticipants.length}>
+                  Удалить участников
+                </button>
+              </div>
+            )}
+
+            {loading && <div className="loading">Загрузка...</div>}
+            {error && <div className="error">{error}</div>}
+          </aside>
+        </section>
+      </div>
     </div>
   )
 }
