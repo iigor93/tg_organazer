@@ -7,10 +7,12 @@ Telegram bot for personal events and reminders with calendar UI, participants, a
 ## Features
 - Calendar-based event creation and browsing.
 - Start/stop time picker and descriptions.
+- Emoji selection for events.
 - Recurrence: daily, weekly, monthly, annual.
 - Participants and shared events via contacts.
 - Upcoming events list.
 - Background reminder sender (`cron_handler.py`).
+- Inline edits of the event constructor message to reduce chat noise.
 
 ## Tech stack
 - Python 3.12
@@ -111,6 +113,10 @@ Start the bot and create an event through the calendar:
 - Choose "Calendar" from the keyboard.
 - Select a date, set time and description.
 - Save and verify it appears on the selected day.
+
+Notes:
+- The constructor message is edited in place when you change time, emoji, description, recurrence, or participants.
+- The description prompt appears as a separate message and is removed after you send the text (same as manual time input).
 
 Add a participant:
 - Share a contact in the chat.
