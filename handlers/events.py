@@ -121,8 +121,7 @@ async def handle_participants_callback(update: Update, context: ContextTypes.DEF
     list_btn.append([InlineKeyboardButton("✅ OK", callback_data="create_event_begin_")])
 
     reply_markup = InlineKeyboardMarkup(list_btn)
-    await query.edit_message_text(text="Добавь пользователя, нажми скрепку, делее Контакт, выбери участника и нажми отправить контакакт", reply_markup=reply_markup)
-
+    await query.edit_message_text(text="Добавь пользователя, нажми скрепку", reply_markup=reply_markup)
 
 
 
