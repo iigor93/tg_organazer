@@ -154,7 +154,14 @@ export class EventsService {
     }
 
     const canceledMap = await this.getCanceledMap(events);
-    const results = [];
+    const results: Array<{
+      id: number;
+      description: string;
+      start_time: string;
+      stop_time: string | null;
+      recurrent: Recurrence | '';
+      single_event: boolean;
+    }> = [];
 
     for (const event of events) {
       const startLocal = DateTime.fromJSDate(event.startAt, { zone: 'utc' }).setZone(tz);
@@ -165,7 +172,7 @@ export class EventsService {
         continue;
       }
 
-      let recurrentLabel = '';
+      let recurrentLabel: Recurrence | '' = '';
       if (event.daily) {
         recurrentLabel = 'daily';
       } else if (event.weekly !== null && event.weekly !== undefined) {
