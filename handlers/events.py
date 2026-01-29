@@ -3,7 +3,7 @@ import logging
 from datetime import date, time
 
 import telegram
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from config import MONTH_NAMES, TOKEN
@@ -95,17 +95,6 @@ async def handle_participants_callback(update: Update, context: ContextTypes.DEF
 
     query = update.callback_query
     await query.answer()
-    if query.data == "participants_add":
-        reply_markup = ReplyKeyboardMarkup(
-            [[KeyboardButton("➕ Добавить участника", request_contact=True)]],
-            resize_keyboard=True,
-            one_time_keyboard=True,
-        )
-        await query.message.reply_text(
-            "Поделитесь контактом участника, чтобы добавить его.",
-            reply_markup=reply_markup,
-        )
-        return
     event: Event | None = context.chat_data.get("event")
 
     tg_id_income = int(query.data.split("_")[1])
@@ -501,8 +490,6 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
                 elif tg_id in event.participants:
                     name = f"{name} ✅"
                 list_btn.append([InlineKeyboardButton(name, callback_data=f"participants_{tg_id}")])
-        else:
-            list_btn.append([InlineKeyboardButton("➕ Добавить участника", callback_data="participants_add")])
 
         list_btn.append([InlineKeyboardButton("✅ OK", callback_data="create_event_begin_")])
 
