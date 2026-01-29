@@ -13,36 +13,36 @@ from entities import Event, Recurrent, TgUser
 logger = logging.getLogger(__name__)
 
 EMOJI_OPTIONS = [
-    "❤️",
-    "😀",
-    "😡",
+    "💰",
+    "🎉",
+    "💤",
     "☠️",
     "⚡",
-    "✨",
+    "💪",
     "🎂",
     "🎮",
     "✈️",
-    "☎️",
-    "⏰",
+    "‼️",
+    "🎶",
     "💩",
-    "🛠",
+    "🎭",
     "💣",
     "💊",
-    "📩",
+    "🏅",
     "📌",
-    "🔔",
-    "📝",
-    "🔎",
-    "🔒",
-    "🔴",
-    "🟠",
-    "🟡",
-    "🟢",
-    "🔵",
-    "🟣",
-    "⚫️",
-    "⚪️",
-    "🟤",
+    "🎁",
+    "✈️",
+    "🚂",
+    "🛍️",
+    "🏥",
+    "🏖️",
+    "🍽️",
+    "🥂",
+    "💐",
+    "💃",
+    "🏃‍♂️",
+    "💇‍♀️",
+    "💅",
 ]
 
 
@@ -651,7 +651,7 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
         action_row = [
             InlineKeyboardButton(
-                f"📅 Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
+                f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
             )
         ]
         reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
