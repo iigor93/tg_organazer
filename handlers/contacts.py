@@ -131,8 +131,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         elif created_user.is_active:
             text = f"Пользователь {first_name} добавлен в ваши контакты!"
         else:
-            text = f"Пользователь {first_name} добавлен в ваши контакты!\nОтправьте ему приглашение в FamPlanner_bot. Вы сможете добавлять его, как участника события, после того как он нажмет START."
-            text = f"Привет!\nДавай вместе создавать события и строить планы!\nЗапусти бота и нажми START.\nВот ссылка: https://t.me/FamPlanner_bot"
+            text = f"Пользователь {first_name} добавлен в ваши контакты!\nОтправьте ему приглашение в FamPlanner_bot. Вы сможете добавлять его, как участника события, после того как он нажмет START. Перешлите ему следующее сообщение:\n\nПривет!\nДавай вместе создавать события и строить планы!\nЗапусти бота и нажми START.\nВот ссылка: https://t.me/FamPlanner_bot"
 
         await db_controller.get_user(tg_id=update.effective_chat.id)
 
