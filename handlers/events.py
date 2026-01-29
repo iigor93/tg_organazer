@@ -637,6 +637,20 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         events = await db_controller.get_current_day_events_by_user(
             user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
         )
+        if events:
+            from handlers.cal import build_day_view  # local import to avoid circular dependency
+
+            text, reply_markup = await build_day_view(
+                user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
+            )
+            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
+            return
+
+        from handlers.cal import generate_calendar  # local import to avoid circular dependency
+
+        reply_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
+        await query.edit_message_text("Удалено одно событие.\n\nВыберите дату события:", reply_markup=reply_markup)
+        return
         formatted_date = f"{day:02d}.{month:02d}.{year}"
 
         header = "Удалено одно событие"
@@ -672,6 +686,20 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         events = await db_controller.get_current_day_events_by_user(
             user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
         )
+        if events:
+            from handlers.cal import build_day_view  # local import to avoid circular dependency
+
+            text, reply_markup = await build_day_view(
+                user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
+            )
+            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
+            return
+
+        from handlers.cal import generate_calendar  # local import to avoid circular dependency
+
+        reply_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
+        await query.edit_message_text("Удалено одно событие.\n\nВыберите дату события:", reply_markup=reply_markup)
+        return
         formatted_date = f"{day:02d}.{month:02d}.{year}"
 
         header = "Удалено одно событие"
