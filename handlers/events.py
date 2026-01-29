@@ -493,7 +493,10 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         list_btn.append([InlineKeyboardButton("✅ OK", callback_data="create_event_begin_")])
 
         reply_markup = InlineKeyboardMarkup(list_btn)
-        await query.edit_message_text(text="Добавь пользователей к событию", reply_markup=reply_markup)
+        await query.edit_message_text(
+            text="Добавь пользователя: нажми 📎скрепку ➡️ 👤Контакт ➡️ выбери участника события ➡️ Отправить контакт",
+            reply_markup=reply_markup,
+        )
     elif data.startswith("create_event_save_to_db"):
         edit_event_id = context.chat_data.pop("edit_event_id", None)
         if edit_event_id:
