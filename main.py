@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import logging
 
@@ -21,7 +20,6 @@ from handlers.cal import handle_calendar_callback, show_calendar
 from handlers.contacts import handle_contact, handle_team_callback, handle_team_command
 from handlers.events import (
     generate_time_selector,
-    format_description,
     get_event_constructor,
     handle_create_event_callback,
     handle_delete_event_callback,
@@ -225,12 +223,6 @@ async def shutdown(app):
 
 
 def main() -> None:
-    # Python 3.14+ doesn't create a default loop in main thread.
-    try:
-        asyncio.get_event_loop()
-    except RuntimeError:
-        asyncio.set_event_loop(asyncio.new_event_loop())
-
     application = ApplicationBuilder().token(TOKEN).post_shutdown(shutdown).build()
 
     # start, Получение геолокации и Пропуск геолокации

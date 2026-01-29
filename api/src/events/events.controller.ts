@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
-import { Request } from 'express';
+import type { Request } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { CreateEventDto } from './dto/create-event.dto';
 import { EventsService } from './events.service';
