@@ -3,7 +3,7 @@ import logging
 from datetime import date, time
 
 import telegram
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from config import MONTH_NAMES, TOKEN
@@ -95,6 +95,17 @@ async def handle_participants_callback(update: Update, context: ContextTypes.DEF
 
     query = update.callback_query
     await query.answer()
+    if query.data == "participants_add":
+        reply_markup = ReplyKeyboardMarkup(
+            [[KeyboardButton("➕ Добавить участника", request_contact=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True,
+        )
+        await query.message.reply_text(
+            "Поделитесь контактом участника, чтобы добавить его.",
+            reply_markup=reply_markup,
+        )
+        return
     event: Event | None = context.chat_data.get("event")
 
     tg_id_income = int(query.data.split("_")[1])
@@ -307,10 +318,7 @@ def get_event_constructor(
     emoji_btn = InlineKeyboardButton(text=(event.emoji if event and event.emoji else "Эмодзи"), callback_data="emoji_open")
     recurrent_btn = InlineKeyboardButton(text=recurrent, callback_data=f"create_event_recurrent_{year}_{month}_{day}")
     participants_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_participants_{year}_{month}_{day}")
-    buttons = [[start_btn, stop_btn], [emoji_btn], [description_btn], [recurrent_btn]]
-
-    if has_participants:
-        buttons.append([participants_btn])
+    buttons = [[start_btn, stop_btn], [emoji_btn], [description_btn], [recurrent_btn], [participants_btn]]
 
     if show_create_btn:
         create_btn = InlineKeyboardButton(text="💾 Сохранить событие", callback_data="create_event_save_to_db")
@@ -485,13 +493,16 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
     elif data.startswith("create_event_participants_"):
         list_btn = []
-        for tg_id, name in event.all_user_participants.items():
-            is_active = context.chat_data.get("participants_status", {}).get(tg_id, True)
-            if not is_active:
-                name = f"{name} (не в боте)"
-            elif tg_id in event.participants:
-                name = f"{name} ✅"
-            list_btn.append([InlineKeyboardButton(name, callback_data=f"participants_{tg_id}")])
+        if event.all_user_participants:
+            for tg_id, name in event.all_user_participants.items():
+                is_active = context.chat_data.get("participants_status", {}).get(tg_id, True)
+                if not is_active:
+                    name = f"{name} (не в боте)"
+                elif tg_id in event.participants:
+                    name = f"{name} ✅"
+                list_btn.append([InlineKeyboardButton(name, callback_data=f"participants_{tg_id}")])
+        else:
+            list_btn.append([InlineKeyboardButton("➕ Добавить участника", callback_data="participants_add")])
 
         list_btn.append([InlineKeyboardButton("✅ OK", callback_data="create_event_begin_")])
 
