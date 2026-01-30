@@ -190,6 +190,7 @@ class DBController:
         if event.stop_time:
             stop_datetime_tz = datetime.combine(event.event_date, event.stop_time).replace(tzinfo=user_tz).astimezone(timezone.utc)
 
+        creator_tg_id = event.creator_tg_id if event.creator_tg_id is not None else event.tg_id
         new_event = DbEvent(
             description=event.description,
             emoji=event.emoji,
@@ -201,6 +202,7 @@ class DBController:
             annual_day=start_datetime_tz.day if event.recurrent == Recurrent.annual else None,
             annual_month=start_datetime_tz.month if event.recurrent == Recurrent.annual else None,
             tg_id=event.tg_id,
+            creator_tg_id=creator_tg_id,
             start_at=start_datetime_tz,
             stop_at=stop_datetime_tz,
         )
@@ -242,6 +244,7 @@ class DBController:
             stop_time=stop_local_time,
             recurrent=recurrent,
             tg_id=db_event.tg_id,
+            creator_tg_id=db_event.creator_tg_id or db_event.tg_id,
         )
 
     @staticmethod
@@ -663,6 +666,7 @@ class DBController:
             if not event:
                 return None
 
+            creator_tg_id = event.creator_tg_id or event.tg_id
             new_event = DbEvent(
                 description=event.description,
                 emoji=event.emoji,
@@ -676,6 +680,7 @@ class DBController:
                 annual_day=event.annual_day,
                 annual_month=event.annual_month,
                 tg_id=user_id,
+                creator_tg_id=creator_tg_id,
             )
 
             session.add(new_event)
@@ -707,6 +712,7 @@ class DBController:
                 annual_day=None,
                 annual_month=None,
                 tg_id=event.tg_id,
+                creator_tg_id=event.creator_tg_id or event.tg_id,
             )
 
             session.add(new_event)

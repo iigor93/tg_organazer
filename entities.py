@@ -42,6 +42,7 @@ class Event(BaseModel):
     participants: list[int | None] = Field(default_factory=list)
     all_user_participants: dict[int, str] = Field(default_factory=dict)
     tg_id: int
+    creator_tg_id: int | None = None
 
     def get_date(self) -> tuple[int, int, int]:
         return self.event_date.year, self.event_date.month, self.event_date.day

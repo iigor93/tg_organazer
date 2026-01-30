@@ -105,6 +105,7 @@ async def handle_participants_callback(update: Update, context: ContextTypes.DEF
     if tg_id_income in event.participants:
         event.participants.remove(tg_id_income)
     else:
+        text = f"✍️ Создать событие на <b>{formatted_date}</b> \n\n* - поля обязательные для заполнения"
         event.participants.append(tg_id_income)
 
     context.chat_data["event"] = event
@@ -288,6 +289,9 @@ def get_event_constructor(
         if event.participants:
             participant_names = [event.all_user_participants.get(tg_id, str(tg_id)) for tg_id in event.participants]
         participants_text = ", ".join(participant_names) if participant_names else "—"
+        creator_name = "—"
+        if event.creator_tg_id:
+            creator_name = event.all_user_participants.get(event.creator_tg_id, str(event.creator_tg_id))
         description_text = format_description(description_text)
         text = (
             "📅 Дата: " + date_text + "\n"
@@ -295,6 +299,7 @@ def get_event_constructor(
             "⏳ Окончание: " + stop_text + "\n"
             "📝 Описание: " + description_text + "\n"
             "🔁 Повтор: " + recurrent_text + "\n"
+            "👤 Создатель: " + creator_name + "\n"
             "👥 Участники: " + participants_text + "\n\n"
             "* - поля обязательные для заполнения"
         )
@@ -334,7 +339,11 @@ async def start_event_creation(
     context.chat_data.pop("time_input_prompt_chat_id", None)
     context.chat_data.pop("edit_event_id", None)
 
-    event = Event(event_date=datetime.datetime.strptime(f"{year}-{month:02d}-{day:02d}", "%Y-%m-%d"), tg_id=update.effective_chat.id)
+    event = Event(
+        event_date=datetime.datetime.strptime(f"{year}-{month:02d}-{day:02d}", "%Y-%m-%d"),
+        tg_id=update.effective_chat.id,
+        creator_tg_id=update.effective_chat.id,
+    )
     context.chat_data["event"] = event
 
     participants = await db_controller.get_participants_with_status(tg_id=update.effective_chat.id, include_inactive=True)
@@ -366,7 +375,10 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
     event: Event | None = context.chat_data.get("event")
     if not event:
-        event = Event(event_date=datetime.datetime.now().date(), tg_id=update.effective_chat.id)
+        event = Event(event_date=datetime.datetime.now().date(), tg_id=update.effective_chat.id, creator_tg_id=update.effective_chat.id)
+        context.chat_data["event"] = event
+    elif not event.creator_tg_id:
+        event.creator_tg_id = update.effective_chat.id
         context.chat_data["event"] = event
 
     year, month, day = event.get_date()
@@ -573,6 +585,8 @@ async def handle_edit_event_callback(update: Update, context: ContextTypes.DEFAU
     context.chat_data["participants_status"] = {tg_id: is_active for tg_id, (_, is_active) in participants.items()}
     event.all_user_participants = {tg_id: name for tg_id, (name, _) in participants.items()}
     missing_names = [tg_id for tg_id in (event.participants or []) if tg_id not in event.all_user_participants]
+    if event.creator_tg_id and event.creator_tg_id not in event.all_user_participants:
+        missing_names.append(event.creator_tg_id)
     if missing_names:
         event.all_user_participants.update(await db_controller.get_users_short_names(missing_names))
 
@@ -654,7 +668,6 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
         action_row = [
             InlineKeyboardButton(
-                f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
             )
         ]
         reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
@@ -675,7 +688,6 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
         action_row = [
             InlineKeyboardButton(
-                f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
             )
         ]
         delete_row = []
@@ -709,7 +721,6 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
         action_row = [
             InlineKeyboardButton(
-                f"📅 Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
             )
         ]
         reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
@@ -730,7 +741,6 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
         action_row = [
             InlineKeyboardButton(
-                f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
             )
         ]
         delete_row = []
