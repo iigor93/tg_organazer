@@ -121,8 +121,7 @@ async def handle_participants_callback(update: Update, context: ContextTypes.DEF
     list_btn.append([InlineKeyboardButton("✅ OK", callback_data="create_event_begin_")])
 
     reply_markup = InlineKeyboardMarkup(list_btn)
-    await query.edit_message_text(text="Добавь пользователей к событию", reply_markup=reply_markup)
-
+    await query.edit_message_text(text="Добавь пользователя, нажми скрепку", reply_markup=reply_markup)
 
 
 
@@ -307,10 +306,7 @@ def get_event_constructor(
     emoji_btn = InlineKeyboardButton(text=(event.emoji if event and event.emoji else "Эмодзи"), callback_data="emoji_open")
     recurrent_btn = InlineKeyboardButton(text=recurrent, callback_data=f"create_event_recurrent_{year}_{month}_{day}")
     participants_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_participants_{year}_{month}_{day}")
-    buttons = [[start_btn, stop_btn], [emoji_btn], [description_btn], [recurrent_btn]]
-
-    if has_participants:
-        buttons.append([participants_btn])
+    buttons = [[start_btn, stop_btn], [emoji_btn], [description_btn], [recurrent_btn], [participants_btn]]
 
     if show_create_btn:
         create_btn = InlineKeyboardButton(text="💾 Сохранить событие", callback_data="create_event_save_to_db")
@@ -485,18 +481,22 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
     elif data.startswith("create_event_participants_"):
         list_btn = []
-        for tg_id, name in event.all_user_participants.items():
-            is_active = context.chat_data.get("participants_status", {}).get(tg_id, True)
-            if not is_active:
-                name = f"{name} (не в боте)"
-            elif tg_id in event.participants:
-                name = f"{name} ✅"
-            list_btn.append([InlineKeyboardButton(name, callback_data=f"participants_{tg_id}")])
+        if event.all_user_participants:
+            for tg_id, name in event.all_user_participants.items():
+                is_active = context.chat_data.get("participants_status", {}).get(tg_id, True)
+                if not is_active:
+                    name = f"{name} (не в боте)"
+                elif tg_id in event.participants:
+                    name = f"{name} ✅"
+                list_btn.append([InlineKeyboardButton(name, callback_data=f"participants_{tg_id}")])
 
         list_btn.append([InlineKeyboardButton("✅ OK", callback_data="create_event_begin_")])
 
         reply_markup = InlineKeyboardMarkup(list_btn)
-        await query.edit_message_text(text="Добавь пользователей к событию", reply_markup=reply_markup)
+        await query.edit_message_text(
+            text="Добавь пользователя: нажми 📎скрепку ➡️ 👤Контакт ➡️ выбери участника события ➡️ Отправить контакт",
+            reply_markup=reply_markup,
+        )
     elif data.startswith("create_event_save_to_db"):
         edit_event_id = context.chat_data.pop("edit_event_id", None)
         if edit_event_id:

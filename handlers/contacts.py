@@ -131,10 +131,34 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         elif created_user.is_active:
             text = f"Пользователь {first_name} добавлен в ваши контакты!"
         else:
-            text = f"Пользователь {first_name} добавлен в ваши контакты!\nНо его еще нет в боте."
+            text = (
+                f"Пользователь {first_name} добавлен в ваши контакты!\n"
+                "Отправьте ему приглашение в FamPlanner_bot. Вы сможете добавлять его, как участника события, после того как он нажмет START. "
+                "Перешлите ему следующее сообщение:"
+            )
+            invite_text = (
+                "Привет!\nДавай вместе создавать события и строить планы!\n"
+                "Запусти бота и нажми START.\nВот ссылка: https://t.me/FamPlanner_bot"
+            )
 
         await db_controller.get_user(tg_id=update.effective_chat.id)
 
         await update.message.reply_text(text=text)
+        if "invite_text" in locals():
+            await update.message.reply_text(text=invite_text)
+
+        event = context.chat_data.get("event")
+        if event:
+            participants = await db_controller.get_participants(tg_id=update.effective_chat.id, include_inactive=True) or {}
+            event.all_user_participants = participants
+            context.chat_data["event"] = event
+
+            reply_markup = InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Продолжить создание события", callback_data="create_event_begin_")]]
+            )
+            await update.message.reply_text(
+                "Участник добавлен в контакты. Можно продолжить создание события.",
+                reply_markup=reply_markup,
+            )
     else:
         await update.message.reply_text("Не удалось получить данные пользователя, попробуйте еще раз")
