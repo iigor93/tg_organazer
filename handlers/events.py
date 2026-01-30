@@ -75,6 +75,33 @@ def _get_back_button_state(context: ContextTypes.DEFAULT_TYPE, event: Event, yea
     return True, f"create_event_back_{year}_{month}_{day}"
 
 
+def _build_delete_events_markup(
+    events: list[tuple[str, int, bool]],
+    selected_ids: set[int],
+    year: int,
+    month: int,
+    day: int,
+) -> InlineKeyboardMarkup:
+    list_btn = []
+    for ev_text, ev_id, is_single in events:
+        btn_text = ev_text
+        if is_single and ev_id in selected_ids:
+            btn_text = f"{btn_text} ❌"
+        if not is_single:
+            callback_data = f"delete_event_recurrent_{ev_id}_{year}_{month}_{day}"
+            btn_text = f"{btn_text}*"
+        else:
+            callback_data = f"delete_event_select_{ev_id}_{year}_{month}_{day}"
+        list_btn.append([InlineKeyboardButton(btn_text, callback_data=callback_data)])
+
+    if selected_ids:
+        list_btn.append([InlineKeyboardButton("🗑 Удалить", callback_data=f"delete_event_confirm_{year}_{month}_{day}")])
+    else:
+        list_btn.append([InlineKeyboardButton("Отмена", callback_data=f"cal_select_{year}_{month}_{day}")])
+
+    return InlineKeyboardMarkup(list_btn)
+
+
 def build_emoji_keyboard() -> InlineKeyboardMarkup:
     keyboard = []
     row = []
@@ -869,31 +896,59 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
         ...
+    elif data.startswith("delete_event_select_"):
+        _, _, _, event_id_str, year_str, month_str, day_str = data.split("_")
+        event_id = int(event_id_str)
+        year = int(year_str)
+        month = int(month_str)
+        day = int(day_str)
+
+        selected_ids = set(context.chat_data.get("delete_selected_ids") or [])
+        if event_id in selected_ids:
+            selected_ids.remove(event_id)
+        else:
+            selected_ids.add(event_id)
+
+        context.chat_data["delete_selected_ids"] = list(selected_ids)
+
+        events = await db_controller.get_current_day_events_by_user(
+            user_id=user.id, month=month, year=year, day=day, deleted=True, tz_name=db_user.time_zone
+        )
+        formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
+        text = f"<b>{formatted_date}</b>\nВыберете события для удаления:"
+        reply_markup = _build_delete_events_markup(events, selected_ids, year, month, day)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
+
+    elif data.startswith("delete_event_confirm_"):
+        _, _, _, year_str, month_str, day_str = data.split("_")
+        year = int(year_str)
+        month = int(month_str)
+        day = int(day_str)
+        selected_ids = set(context.chat_data.get("delete_selected_ids") or [])
+        if selected_ids:
+            for event_id in selected_ids:
+                await db_controller.delete_event_by_id(event_id=event_id, tz_name=db_user.time_zone)
+        context.chat_data.pop("delete_selected_ids", None)
+
+        from handlers.cal import build_day_view  # local import to avoid circular dependency
+
+        text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
+
     else:  # конструктор событий для удаления
         _, _, year, month, day = data.split("_")
         year = int(year)
         month = int(month)
         day = int(day)
 
+        context.chat_data["delete_selected_ids"] = []
         events = await db_controller.get_current_day_events_by_user(
             user_id=user.id, month=month, year=year, day=day, deleted=True, tz_name=db_user.time_zone
         )
 
         formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
         text = f"<b>{formatted_date}</b>\nВыберете события для удаления:"
-        list_btn = []
-        for _event in events:
-            btn_text = _event[0]
-            if not _event[2]:
-                callback_data = f"delete_event_recurrent_{_event[1]}_{year}_{month}_{day}"
-                btn_text += "*"
-            else:
-                callback_data = f"delete_event_id_{_event[1]}_{year}_{month}_{day}"
-            list_btn.append([InlineKeyboardButton(btn_text, callback_data=callback_data)])
-
-        list_btn.append([InlineKeyboardButton("Отмена", callback_data=f"cal_select_{year}_{month}_{day}")])
-
-        reply_markup = InlineKeyboardMarkup(list_btn)
+        reply_markup = _build_delete_events_markup(events, set(), year, month, day)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
 
