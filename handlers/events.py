@@ -105,7 +105,6 @@ async def handle_participants_callback(update: Update, context: ContextTypes.DEF
     if tg_id_income in event.participants:
         event.participants.remove(tg_id_income)
     else:
-        text = f"✍️ Создать событие на <b>{formatted_date}</b> \n\n* - поля обязательные для заполнения"
         event.participants.append(tg_id_income)
 
     context.chat_data["event"] = event
