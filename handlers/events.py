@@ -46,6 +46,35 @@ EMOJI_OPTIONS = [
 ]
 
 
+def _event_snapshot(event: Event) -> dict:
+    participants = sorted([int(item) for item in (event.participants or []) if item is not None])
+    return {
+        "start_time": event.start_time.isoformat() if event.start_time else None,
+        "stop_time": event.stop_time.isoformat() if event.stop_time else None,
+        "description": event.description,
+        "emoji": event.emoji,
+        "recurrent": event.recurrent.value if event.recurrent else None,
+        "participants": participants,
+    }
+
+
+def _event_has_changes(event: Event, original: dict | None) -> bool:
+    if not original:
+        return True
+    return _event_snapshot(event) != original
+
+
+def _get_back_button_state(context: ContextTypes.DEFAULT_TYPE, event: Event, year: int, month: int, day: int) -> tuple[bool, str | None]:
+    if not context.chat_data.get("edit_event_id"):
+        return False, None
+    original = context.chat_data.get("edit_event_original")
+    if not original:
+        return False, None
+    if _event_has_changes(event, original):
+        return False, None
+    return True, f"create_event_back_{year}_{month}_{day}"
+
+
 def build_emoji_keyboard() -> InlineKeyboardMarkup:
     keyboard = []
     row = []
@@ -152,6 +181,7 @@ async def handle_emoji_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     year, month, day = event.get_date()
     has_participants = bool(event.all_user_participants)
+    show_back_btn, back_callback_data = _get_back_button_state(context, event, year, month, day)
     text, reply_markup = get_event_constructor(
         event=event,
         year=year,
@@ -159,6 +189,8 @@ async def handle_emoji_callback(update: Update, context: ContextTypes.DEFAULT_TY
         day=day,
         has_participants=has_participants,
         show_details=bool(context.chat_data.get("edit_event_id")),
+        show_back_btn=show_back_btn,
+        back_callback_data=back_callback_data,
     )
     await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
@@ -252,6 +284,8 @@ def get_event_constructor(
     day: int | None = None,
     has_participants: bool = False,
     show_details: bool = False,
+    show_back_btn: bool = False,
+    back_callback_data: str | None = None,
 ):
     start_time = "Начало *"
     stop_time = "Окончание"
@@ -312,7 +346,11 @@ def get_event_constructor(
     participants_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_participants_{year}_{month}_{day}")
     buttons = [[start_btn, stop_btn], [emoji_btn], [description_btn], [recurrent_btn], [participants_btn]]
 
-    if show_create_btn:
+    if show_back_btn:
+        callback_data = back_callback_data or "create_event_back_"
+        back_btn = InlineKeyboardButton(text="↩ Вернуться в календарь", callback_data=callback_data)
+        buttons.append([back_btn])
+    elif show_create_btn:
         create_btn = InlineKeyboardButton(text="💾 Сохранить событие", callback_data="create_event_save_to_db")
         buttons.append([create_btn])
 
@@ -337,6 +375,7 @@ async def start_event_creation(
     context.chat_data.pop("time_input_prompt_message_id", None)
     context.chat_data.pop("time_input_prompt_chat_id", None)
     context.chat_data.pop("edit_event_id", None)
+    context.chat_data.pop("edit_event_original", None)
 
     event = Event(
         event_date=datetime.datetime.strptime(f"{year}-{month:02d}-{day:02d}", "%Y-%m-%d"),
@@ -401,6 +440,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
                 context.chat_data["event"] = event
             year, month, day = event.get_date()
             has_participants = bool(event.all_user_participants)
+            show_back_btn, back_callback_data = _get_back_button_state(context, event, year, month, day)
             text, reply_markup = get_event_constructor(
                 event=event,
                 year=year,
@@ -408,6 +448,8 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
                 day=day,
                 has_participants=has_participants,
                 show_details=bool(context.chat_data.get("edit_event_id")),
+                show_back_btn=show_back_btn,
+                back_callback_data=back_callback_data,
             )
             await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
@@ -472,6 +514,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         context.chat_data["event"] = event
 
         has_participants = bool(event.all_user_participants)
+        show_back_btn, back_callback_data = _get_back_button_state(context, event, year, month, day)
         text, reply_markup = get_event_constructor(
             event=event,
             year=year,
@@ -479,6 +522,8 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             day=day,
             has_participants=has_participants,
             show_details=bool(context.chat_data.get("edit_event_id")),
+            show_back_btn=show_back_btn,
+            back_callback_data=back_callback_data,
         )
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
@@ -508,8 +553,33 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             text="Добавь пользователя: нажми 📎скрепку ➡️ 👤Контакт ➡️ выбери участника события ➡️ Отправить контакт",
             reply_markup=reply_markup,
         )
+    elif data.startswith("create_event_back_"):
+        parts = data.split("_")
+        if len(parts) >= 6:
+            year, month, day = int(parts[3]), int(parts[4]), int(parts[5])
+        else:
+            year, month, day = event.get_date()
+
+        context.chat_data.pop("team_participants", None)
+        context.chat_data.pop("team_selected", None)
+        context.chat_data.pop("event", None)
+        context.chat_data.pop("participants_status", None)
+        context.chat_data.pop("time_picker_message_id", None)
+        context.chat_data.pop("time_picker_chat_id", None)
+        context.chat_data.pop("await_time_input", None)
+        context.chat_data.pop("time_input_prompt_message_id", None)
+        context.chat_data.pop("time_input_prompt_chat_id", None)
+        context.chat_data.pop("edit_event_id", None)
+        context.chat_data.pop("edit_event_original", None)
+
+        from handlers.cal import build_day_view  # local import to avoid circular dependency
+
+        text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
+
     elif data.startswith("create_event_save_to_db"):
         edit_event_id = context.chat_data.pop("edit_event_id", None)
+        context.chat_data.pop("edit_event_original", None)
         if edit_event_id:
             event_id = await db_controller.update_event(event_id=edit_event_id, event=event, tz_name=db_user.time_zone)
         else:
@@ -579,6 +649,7 @@ async def handle_edit_event_callback(update: Update, context: ContextTypes.DEFAU
 
     context.chat_data["event"] = event
     context.chat_data["edit_event_id"] = event_id
+    context.chat_data["edit_event_original"] = _event_snapshot(event)
 
     participants = await db_controller.get_participants_with_status(tg_id=user.id, include_inactive=True)
     context.chat_data["participants_status"] = {tg_id: is_active for tg_id, (_, is_active) in participants.items()}
@@ -591,6 +662,7 @@ async def handle_edit_event_callback(update: Update, context: ContextTypes.DEFAU
 
     year, month, day = event.get_date()
     has_participants = bool(event.all_user_participants)
+    show_back_btn, back_callback_data = _get_back_button_state(context, event, year, month, day)
     text, reply_markup = get_event_constructor(
         event=event,
         year=year,
@@ -598,6 +670,8 @@ async def handle_edit_event_callback(update: Update, context: ContextTypes.DEFAU
         day=day,
         has_participants=has_participants,
         show_details=bool(context.chat_data.get("edit_event_id")),
+        show_back_btn=show_back_btn,
+        back_callback_data=back_callback_data,
     )
     await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
