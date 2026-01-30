@@ -572,6 +572,9 @@ async def handle_edit_event_callback(update: Update, context: ContextTypes.DEFAU
     participants = await db_controller.get_participants_with_status(tg_id=user.id, include_inactive=True)
     context.chat_data["participants_status"] = {tg_id: is_active for tg_id, (_, is_active) in participants.items()}
     event.all_user_participants = {tg_id: name for tg_id, (name, _) in participants.items()}
+    missing_names = [tg_id for tg_id in (event.participants or []) if tg_id not in event.all_user_participants]
+    if missing_names:
+        event.all_user_participants.update(await db_controller.get_users_short_names(missing_names))
 
     year, month, day = event.get_date()
     has_participants = bool(event.all_user_participants)

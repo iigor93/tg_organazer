@@ -69,7 +69,35 @@ class DBController:
         return TgUser.model_validate(user)
 
     @staticmethod
-    async def get_user(tg_id: int) -> dict | None: ...
+    async def get_user(tg_id: int) -> TgUser | None:
+        async with AsyncSessionLocal() as session:
+            user = (await session.execute(select(DB_User).where(DB_User.tg_id == tg_id))).scalar_one_or_none()
+            if not user:
+                return None
+
+            user.id = user.tg_id
+            user.time_zone = config.DEFAULT_TIMEZONE_NAME if not user.time_zone else user.time_zone
+            return TgUser.model_validate(user)
+
+    @staticmethod
+    async def get_users_short_names(tg_ids: list[int]) -> dict[int, str]:
+        if not tg_ids:
+            return {}
+
+        async with AsyncSessionLocal() as session:
+            users = (await session.execute(select(DB_User).where(DB_User.tg_id.in_(tg_ids)))).scalars().all()
+
+        names: dict[int, str] = {}
+        for user in users:
+            if user.first_name:
+                name = user.first_name
+            elif user.username:
+                name = user.username
+            else:
+                name = str(user.tg_id)
+            names[user.tg_id] = name
+
+        return names
 
     @staticmethod
     async def get_participants(tg_id: int, include_inactive: bool = False) -> dict[int, str] | None:
