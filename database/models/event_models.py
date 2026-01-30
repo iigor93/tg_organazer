@@ -23,6 +23,7 @@ class DbEvent(Base):
     annual_month = Column(Integer, nullable=True, comment="Месяц, если событие ежегодное, UTC")
 
     tg_id = Column(BigInteger, nullable=False, comment="Юзер тг id, кому принадлежит событие")
+    creator_tg_id = Column(BigInteger, nullable=True, comment="Creator tg id")
     canceled_events = relationship("CanceledEvent", back_populates="event", lazy="selectin", uselist=True, cascade="all, delete-orphan")
     participants = relationship("EventParticipant", back_populates="event", lazy="selectin", uselist=True, cascade="all, delete-orphan")
 

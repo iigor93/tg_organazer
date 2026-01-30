@@ -46,6 +46,62 @@ EMOJI_OPTIONS = [
 ]
 
 
+def _event_snapshot(event: Event) -> dict:
+    participants = sorted([int(item) for item in (event.participants or []) if item is not None])
+    return {
+        "start_time": event.start_time.isoformat() if event.start_time else None,
+        "stop_time": event.stop_time.isoformat() if event.stop_time else None,
+        "description": event.description,
+        "emoji": event.emoji,
+        "recurrent": event.recurrent.value if event.recurrent else None,
+        "participants": participants,
+    }
+
+
+def _event_has_changes(event: Event, original: dict | None) -> bool:
+    if not original:
+        return True
+    return _event_snapshot(event) != original
+
+
+def _get_back_button_state(context: ContextTypes.DEFAULT_TYPE, event: Event, year: int, month: int, day: int) -> tuple[bool, str | None]:
+    if not context.chat_data.get("edit_event_id"):
+        return False, None
+    original = context.chat_data.get("edit_event_original")
+    if not original:
+        return False, None
+    if _event_has_changes(event, original):
+        return False, None
+    return True, f"create_event_back_{year}_{month}_{day}"
+
+
+def _build_delete_events_markup(
+    events: list[tuple[str, int, bool]],
+    selected_ids: set[int],
+    year: int,
+    month: int,
+    day: int,
+) -> InlineKeyboardMarkup:
+    list_btn = []
+    for ev_text, ev_id, is_single in events:
+        btn_text = ev_text
+        if is_single and ev_id in selected_ids:
+            btn_text = f"{btn_text} ❌"
+        if not is_single:
+            callback_data = f"delete_event_recurrent_{ev_id}_{year}_{month}_{day}"
+            btn_text = f"{btn_text}*"
+        else:
+            callback_data = f"delete_event_select_{ev_id}_{year}_{month}_{day}"
+        list_btn.append([InlineKeyboardButton(btn_text, callback_data=callback_data)])
+
+    if selected_ids:
+        list_btn.append([InlineKeyboardButton("🗑 Удалить", callback_data=f"delete_event_confirm_{year}_{month}_{day}")])
+    else:
+        list_btn.append([InlineKeyboardButton("Отмена", callback_data=f"cal_select_{year}_{month}_{day}")])
+
+    return InlineKeyboardMarkup(list_btn)
+
+
 def build_emoji_keyboard() -> InlineKeyboardMarkup:
     keyboard = []
     row = []
@@ -152,6 +208,7 @@ async def handle_emoji_callback(update: Update, context: ContextTypes.DEFAULT_TY
 
     year, month, day = event.get_date()
     has_participants = bool(event.all_user_participants)
+    show_back_btn, back_callback_data = _get_back_button_state(context, event, year, month, day)
     text, reply_markup = get_event_constructor(
         event=event,
         year=year,
@@ -159,6 +216,8 @@ async def handle_emoji_callback(update: Update, context: ContextTypes.DEFAULT_TY
         day=day,
         has_participants=has_participants,
         show_details=bool(context.chat_data.get("edit_event_id")),
+        show_back_btn=show_back_btn,
+        back_callback_data=back_callback_data,
     )
     await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
@@ -252,6 +311,9 @@ def get_event_constructor(
     day: int | None = None,
     has_participants: bool = False,
     show_details: bool = False,
+    show_back_btn: bool = False,
+    back_callback_data: str | None = None,
+    read_only: bool = False,
 ):
     start_time = "Начало *"
     stop_time = "Окончание"
@@ -288,6 +350,9 @@ def get_event_constructor(
         if event.participants:
             participant_names = [event.all_user_participants.get(tg_id, str(tg_id)) for tg_id in event.participants]
         participants_text = ", ".join(participant_names) if participant_names else "—"
+        creator_name = "—"
+        if event.creator_tg_id:
+            creator_name = event.all_user_participants.get(event.creator_tg_id, str(event.creator_tg_id))
         description_text = format_description(description_text)
         text = (
             "📅 Дата: " + date_text + "\n"
@@ -295,11 +360,15 @@ def get_event_constructor(
             "⏳ Окончание: " + stop_text + "\n"
             "📝 Описание: " + description_text + "\n"
             "🔁 Повтор: " + recurrent_text + "\n"
+            "👤 Создатель: " + creator_name + "\n"
             "👥 Участники: " + participants_text + "\n\n"
             "* - поля обязательные для заполнения"
         )
     else:
         text = f"✍️ Создать событие на <b>{formatted_date}</b> \n\n* - поля обязательные для заполнения"
+    if read_only:
+        return text, None
+
     start_btn = InlineKeyboardButton(text=start_time, callback_data=f"create_event_start_{year}_{month}_{day}")
     stop_btn = InlineKeyboardButton(text=stop_time, callback_data=f"create_event_stop_{year}_{month}_{day}")
     description_btn = InlineKeyboardButton(text=description, callback_data=f"create_event_description_{year}_{month}_{day}")
@@ -308,7 +377,11 @@ def get_event_constructor(
     participants_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_participants_{year}_{month}_{day}")
     buttons = [[start_btn, stop_btn], [emoji_btn], [description_btn], [recurrent_btn], [participants_btn]]
 
-    if show_create_btn:
+    if show_back_btn:
+        callback_data = back_callback_data or "create_event_back_"
+        back_btn = InlineKeyboardButton(text="↩ Вернуться в календарь", callback_data=callback_data)
+        buttons.append([back_btn])
+    elif show_create_btn:
         create_btn = InlineKeyboardButton(text="💾 Сохранить событие", callback_data="create_event_save_to_db")
         buttons.append([create_btn])
 
@@ -333,8 +406,14 @@ async def start_event_creation(
     context.chat_data.pop("time_input_prompt_message_id", None)
     context.chat_data.pop("time_input_prompt_chat_id", None)
     context.chat_data.pop("edit_event_id", None)
+    context.chat_data.pop("edit_event_original", None)
+    context.chat_data.pop("edit_event_readonly", None)
 
-    event = Event(event_date=datetime.datetime.strptime(f"{year}-{month:02d}-{day:02d}", "%Y-%m-%d"), tg_id=update.effective_chat.id)
+    event = Event(
+        event_date=datetime.datetime.strptime(f"{year}-{month:02d}-{day:02d}", "%Y-%m-%d"),
+        tg_id=update.effective_chat.id,
+        creator_tg_id=update.effective_chat.id,
+    )
     context.chat_data["event"] = event
 
     participants = await db_controller.get_participants_with_status(tg_id=update.effective_chat.id, include_inactive=True)
@@ -366,8 +445,14 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
     event: Event | None = context.chat_data.get("event")
     if not event:
-        event = Event(event_date=datetime.datetime.now().date(), tg_id=update.effective_chat.id)
+        event = Event(event_date=datetime.datetime.now().date(), tg_id=update.effective_chat.id, creator_tg_id=update.effective_chat.id)
         context.chat_data["event"] = event
+    elif not event.creator_tg_id:
+        event.creator_tg_id = update.effective_chat.id
+        context.chat_data["event"] = event
+    if context.chat_data.get("edit_event_readonly") and not data.startswith("create_event_back_"):
+        await query.answer("Только просмотр", show_alert=False)
+        return
 
     year, month, day = event.get_date()
 
@@ -390,6 +475,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
                 context.chat_data["event"] = event
             year, month, day = event.get_date()
             has_participants = bool(event.all_user_participants)
+            show_back_btn, back_callback_data = _get_back_button_state(context, event, year, month, day)
             text, reply_markup = get_event_constructor(
                 event=event,
                 year=year,
@@ -397,6 +483,8 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
                 day=day,
                 has_participants=has_participants,
                 show_details=bool(context.chat_data.get("edit_event_id")),
+                show_back_btn=show_back_btn,
+                back_callback_data=back_callback_data,
             )
             await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
@@ -461,6 +549,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         context.chat_data["event"] = event
 
         has_participants = bool(event.all_user_participants)
+        show_back_btn, back_callback_data = _get_back_button_state(context, event, year, month, day)
         text, reply_markup = get_event_constructor(
             event=event,
             year=year,
@@ -468,6 +557,8 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             day=day,
             has_participants=has_participants,
             show_details=bool(context.chat_data.get("edit_event_id")),
+            show_back_btn=show_back_btn,
+            back_callback_data=back_callback_data,
         )
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
@@ -497,8 +588,35 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
             text="Добавь пользователя: нажми 📎скрепку ➡️ 👤Контакт ➡️ выбери участника события ➡️ Отправить контакт",
             reply_markup=reply_markup,
         )
+    elif data.startswith("create_event_back_"):
+        parts = data.split("_")
+        if len(parts) >= 6:
+            year, month, day = int(parts[3]), int(parts[4]), int(parts[5])
+        else:
+            year, month, day = event.get_date()
+
+        context.chat_data.pop("team_participants", None)
+        context.chat_data.pop("team_selected", None)
+        context.chat_data.pop("event", None)
+        context.chat_data.pop("participants_status", None)
+        context.chat_data.pop("time_picker_message_id", None)
+        context.chat_data.pop("time_picker_chat_id", None)
+        context.chat_data.pop("await_time_input", None)
+        context.chat_data.pop("time_input_prompt_message_id", None)
+        context.chat_data.pop("time_input_prompt_chat_id", None)
+        context.chat_data.pop("edit_event_id", None)
+        context.chat_data.pop("edit_event_original", None)
+        context.chat_data.pop("edit_event_readonly", None)
+
+        from handlers.cal import build_day_view  # local import to avoid circular dependency
+
+        text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
+
     elif data.startswith("create_event_save_to_db"):
         edit_event_id = context.chat_data.pop("edit_event_id", None)
+        context.chat_data.pop("edit_event_original", None)
+        context.chat_data.pop("edit_event_readonly", None)
         if edit_event_id:
             event_id = await db_controller.update_event(event_id=edit_event_id, event=event, tz_name=db_user.time_zone)
         else:
@@ -568,21 +686,46 @@ async def handle_edit_event_callback(update: Update, context: ContextTypes.DEFAU
 
     context.chat_data["event"] = event
     context.chat_data["edit_event_id"] = event_id
+    context.chat_data["edit_event_original"] = _event_snapshot(event)
 
     participants = await db_controller.get_participants_with_status(tg_id=user.id, include_inactive=True)
     context.chat_data["participants_status"] = {tg_id: is_active for tg_id, (_, is_active) in participants.items()}
     event.all_user_participants = {tg_id: name for tg_id, (name, _) in participants.items()}
+    missing_names = [tg_id for tg_id in (event.participants or []) if tg_id not in event.all_user_participants]
+    if event.creator_tg_id and event.creator_tg_id not in event.all_user_participants:
+        missing_names.append(event.creator_tg_id)
+    if missing_names:
+        event.all_user_participants.update(await db_controller.get_users_short_names(missing_names))
 
     year, month, day = event.get_date()
     has_participants = bool(event.all_user_participants)
-    text, reply_markup = get_event_constructor(
-        event=event,
-        year=year,
-        month=month,
-        day=day,
-        has_participants=has_participants,
-        show_details=bool(context.chat_data.get("edit_event_id")),
-    )
+    if event.creator_tg_id and event.creator_tg_id != user.id:
+        context.chat_data["edit_event_readonly"] = True
+        text, _ = get_event_constructor(
+            event=event,
+            year=year,
+            month=month,
+            day=day,
+            has_participants=has_participants,
+            show_details=True,
+            read_only=True,
+        )
+        reply_markup = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("↩ Вернуться в календарь", callback_data=f"create_event_back_{year}_{month}_{day}")]]
+        )
+    else:
+        context.chat_data.pop("edit_event_readonly", None)
+        show_back_btn, back_callback_data = _get_back_button_state(context, event, year, month, day)
+        text, reply_markup = get_event_constructor(
+            event=event,
+            year=year,
+            month=month,
+            day=day,
+            has_participants=has_participants,
+            show_details=bool(context.chat_data.get("edit_event_id")),
+            show_back_btn=show_back_btn,
+            back_callback_data=back_callback_data,
+        )
     await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
 
@@ -634,28 +777,12 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
 
         await db_controller.delete_event_by_id(event_id=db_id, tz_name=db_user.time_zone)
 
-        events = await db_controller.get_current_day_events_by_user(
-            user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
+        from handlers.cal import build_day_view  # local import to avoid circular dependency
+
+        text, reply_markup = await build_day_view(
+            user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
         )
-        if events:
-            from handlers.cal import build_day_view  # local import to avoid circular dependency
-
-            text, reply_markup = await build_day_view(
-                user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
-            )
-            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
-            return
-
-        from handlers.cal import generate_calendar  # local import to avoid circular dependency
-
-        calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        action_row = [
-            InlineKeyboardButton(
-                f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
-            )
-        ]
-        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
-        await query.edit_message_text("Удалено одно событие.\n\nВыберите дату события:", reply_markup=reply_markup)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
         return
         formatted_date = f"{day:02d}.{month:02d}.{year}"
 
@@ -672,7 +799,6 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
         action_row = [
             InlineKeyboardButton(
-                f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
             )
         ]
         delete_row = []
@@ -689,28 +815,12 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         day = int(day_str)
         await db_controller.create_cancel_event(event_id=int(db_id), cancel_date=date.fromisoformat(f"{year}-{month:02d}-{day:02d}"))
 
-        events = await db_controller.get_current_day_events_by_user(
-            user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
+        from handlers.cal import build_day_view  # local import to avoid circular dependency
+
+        text, reply_markup = await build_day_view(
+            user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
         )
-        if events:
-            from handlers.cal import build_day_view  # local import to avoid circular dependency
-
-            text, reply_markup = await build_day_view(
-                user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
-            )
-            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
-            return
-
-        from handlers.cal import generate_calendar  # local import to avoid circular dependency
-
-        calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        action_row = [
-            InlineKeyboardButton(
-                f"📅 Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
-            )
-        ]
-        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
-        await query.edit_message_text("Удалено одно событие.\n\nВыберите дату события:", reply_markup=reply_markup)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
         return
         formatted_date = f"{day:02d}.{month:02d}.{year}"
 
@@ -727,7 +837,6 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
         action_row = [
             InlineKeyboardButton(
-                f"✍️ Создать событие на {day:02d}.{month:02d}.{year}", callback_data=f"create_event_begin_{year}_{month}_{day}"
             )
         ]
         delete_row = []
@@ -757,31 +866,59 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
         ...
+    elif data.startswith("delete_event_select_"):
+        _, _, _, event_id_str, year_str, month_str, day_str = data.split("_")
+        event_id = int(event_id_str)
+        year = int(year_str)
+        month = int(month_str)
+        day = int(day_str)
+
+        selected_ids = set(context.chat_data.get("delete_selected_ids") or [])
+        if event_id in selected_ids:
+            selected_ids.remove(event_id)
+        else:
+            selected_ids.add(event_id)
+
+        context.chat_data["delete_selected_ids"] = list(selected_ids)
+
+        events = await db_controller.get_current_day_events_by_user(
+            user_id=user.id, month=month, year=year, day=day, deleted=True, tz_name=db_user.time_zone
+        )
+        formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
+        text = f"<b>{formatted_date}</b>\nВыберете события для удаления:"
+        reply_markup = _build_delete_events_markup(events, selected_ids, year, month, day)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
+
+    elif data.startswith("delete_event_confirm_"):
+        _, _, _, year_str, month_str, day_str = data.split("_")
+        year = int(year_str)
+        month = int(month_str)
+        day = int(day_str)
+        selected_ids = set(context.chat_data.get("delete_selected_ids") or [])
+        if selected_ids:
+            for event_id in selected_ids:
+                await db_controller.delete_event_by_id(event_id=event_id, tz_name=db_user.time_zone)
+        context.chat_data.pop("delete_selected_ids", None)
+
+        from handlers.cal import build_day_view  # local import to avoid circular dependency
+
+        text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
+
     else:  # конструктор событий для удаления
         _, _, year, month, day = data.split("_")
         year = int(year)
         month = int(month)
         day = int(day)
 
+        context.chat_data["delete_selected_ids"] = []
         events = await db_controller.get_current_day_events_by_user(
             user_id=user.id, month=month, year=year, day=day, deleted=True, tz_name=db_user.time_zone
         )
 
         formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
         text = f"<b>{formatted_date}</b>\nВыберете события для удаления:"
-        list_btn = []
-        for _event in events:
-            btn_text = _event[0]
-            if not _event[2]:
-                callback_data = f"delete_event_recurrent_{_event[1]}_{year}_{month}_{day}"
-                btn_text += "*"
-            else:
-                callback_data = f"delete_event_id_{_event[1]}_{year}_{month}_{day}"
-            list_btn.append([InlineKeyboardButton(btn_text, callback_data=callback_data)])
-
-        list_btn.append([InlineKeyboardButton("Отмена", callback_data=f"cal_select_{year}_{month}_{day}")])
-
-        reply_markup = InlineKeyboardMarkup(list_btn)
+        reply_markup = _build_delete_events_markup(events, set(), year, month, day)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
 

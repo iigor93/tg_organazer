@@ -21,6 +21,7 @@ from handlers.contacts import handle_contact, handle_team_callback, handle_team_
 from handlers.events import (
     generate_time_selector,
     get_event_constructor,
+    _get_back_button_state,
     handle_create_event_callback,
     handle_delete_event_callback,
     handle_edit_event_callback,
@@ -149,7 +150,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         context.chat_data["event"] = event
         has_participants = bool(event.all_user_participants)
 
-        text, reply_markup = get_event_constructor(event=event, has_participants=has_participants)
+        year, month, day = event.get_date()
+        show_back_btn, back_callback_data = _get_back_button_state(context, event, year, month, day)
+        text, reply_markup = get_event_constructor(
+            event=event,
+            year=year,
+            month=month,
+            day=day,
+            has_participants=has_participants,
+            show_details=bool(context.chat_data.get("edit_event_id")),
+            show_back_btn=show_back_btn,
+            back_callback_data=back_callback_data,
+        )
         target_message_id = None
         target_chat_id = None
         prompt_message_id = None
