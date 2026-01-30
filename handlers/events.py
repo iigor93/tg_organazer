@@ -777,27 +777,12 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
 
         await db_controller.delete_event_by_id(event_id=db_id, tz_name=db_user.time_zone)
 
-        events = await db_controller.get_current_day_events_by_user(
-            user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
+        from handlers.cal import build_day_view  # local import to avoid circular dependency
+
+        text, reply_markup = await build_day_view(
+            user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
         )
-        if events:
-            from handlers.cal import build_day_view  # local import to avoid circular dependency
-
-            text, reply_markup = await build_day_view(
-                user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
-            )
-            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
-            return
-
-        from handlers.cal import generate_calendar  # local import to avoid circular dependency
-
-        calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        action_row = [
-            InlineKeyboardButton(
-            )
-        ]
-        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
-        await query.edit_message_text("Удалено одно событие.\n\nВыберите дату события:", reply_markup=reply_markup)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
         return
         formatted_date = f"{day:02d}.{month:02d}.{year}"
 
@@ -830,27 +815,12 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         day = int(day_str)
         await db_controller.create_cancel_event(event_id=int(db_id), cancel_date=date.fromisoformat(f"{year}-{month:02d}-{day:02d}"))
 
-        events = await db_controller.get_current_day_events_by_user(
-            user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
+        from handlers.cal import build_day_view  # local import to avoid circular dependency
+
+        text, reply_markup = await build_day_view(
+            user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
         )
-        if events:
-            from handlers.cal import build_day_view  # local import to avoid circular dependency
-
-            text, reply_markup = await build_day_view(
-                user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
-            )
-            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
-            return
-
-        from handlers.cal import generate_calendar  # local import to avoid circular dependency
-
-        calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        action_row = [
-            InlineKeyboardButton(
-            )
-        ]
-        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row])
-        await query.edit_message_text("Удалено одно событие.\n\nВыберите дату события:", reply_markup=reply_markup)
+        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
         return
         formatted_date = f"{day:02d}.{month:02d}.{year}"
 
