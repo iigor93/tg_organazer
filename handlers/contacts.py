@@ -146,5 +146,19 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(text=text)
         if "invite_text" in locals():
             await update.message.reply_text(text=invite_text)
+
+        event = context.chat_data.get("event")
+        if event:
+            participants = await db_controller.get_participants(tg_id=update.effective_chat.id, include_inactive=True) or {}
+            event.all_user_participants = participants
+            context.chat_data["event"] = event
+
+            reply_markup = InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Продолжить создание события", callback_data="create_event_begin_")]]
+            )
+            await update.message.reply_text(
+                "Участник добавлен в контакты. Можно продолжить создание события.",
+                reply_markup=reply_markup,
+            )
     else:
         await update.message.reply_text("Не удалось получить данные пользователя, попробуйте еще раз")
