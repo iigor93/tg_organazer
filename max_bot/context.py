@@ -39,7 +39,7 @@ class MaxMessage:
 
     @property
     def chat_id(self) -> int:
-        return self.sender.id
+        return self.recipient.id if self.recipient else self.sender.id
 
     async def reply_text(
         self, text: str, reply_markup: InlineKeyboardMarkup | ReplyKeyboardMarkup | None = None, parse_mode: str | None = None
@@ -50,7 +50,8 @@ class MaxMessage:
         fmt = None
         if parse_mode == "HTML":
             fmt = "html"
-        response = await self.bot.send_message(text=text, user_id=self.sender.id, attachments=attachments, fmt=fmt)
+        target_user_id = self.recipient.id if self.recipient else self.sender.id
+        response = await self.bot.send_message(text=text, user_id=target_user_id, attachments=attachments, fmt=fmt)
         message_data = response.get("message") if isinstance(response, dict) else None
         if not message_data:
             return None
