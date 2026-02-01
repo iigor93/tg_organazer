@@ -31,6 +31,8 @@ def _parse_message(data: dict | None, api: MaxApi) -> MaxMessage | None:
         payload = attachment.get("payload") or attachment.get("body") or {}
         if att_type in {"contact", "shared_contact", "user_contact"} and not payload:
             payload = attachment
+        if att_type in {"contact", "shared_contact", "user_contact"} and isinstance(payload, dict) and payload.get("max_info"):
+            payload = payload.get("max_info") or payload
         lat = attachment.get("lat") or attachment.get("latitude")
         lon = attachment.get("lon") or attachment.get("longitude")
         if lat is not None and lon is not None:
