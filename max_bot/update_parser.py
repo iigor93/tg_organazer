@@ -36,7 +36,7 @@ def _parse_message(data: dict | None, api: MaxApi) -> MaxMessage | None:
             break
     sender = _parse_user(data.get("sender"))
     recipient = _parse_user(data.get("recipient")) if data.get("recipient") else None
-    return MaxMessage(id=int(message_id), text=text, location=location, sender=sender, recipient=recipient, bot=api)
+    return MaxMessage(id=message_id, text=text, location=location, sender=sender, recipient=recipient, bot=api)
 
 
 def _extract_callback_payload(update: dict[str, Any]) -> str | None:
