@@ -231,7 +231,7 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
         await show_upcoming_events(update, context)
     elif normalized == MENU_TEAM_TEXT.lower():
         await handle_team_command(update, context)
-    elif normalized == MENU_MY_ID_TEXT.lower() or normalized in {"??? id", "my id", "show my id"}:
+    elif normalized == MENU_MY_ID_TEXT.lower() or normalized in {"мой id", "my id", "show my id"}:
         await update.message.reply_text(f"Ваш ID: {update.effective_chat.id}")
     elif normalized == MENU_HELP_TEXT.lower():
         await handle_help(update, context)

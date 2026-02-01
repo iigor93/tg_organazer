@@ -152,11 +152,21 @@ async def show_calendar(update: MaxUpdate, context: MaxContext) -> None:
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(
-        "📅 Выберите дату события:",
-        reply_markup=reply_markup,
-        parse_mode="HTML",
-    )
+    message = update.message or (update.callback_query.message if update.callback_query else None)
+    text = "\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0434\u0430\u0442\u0443 \u0441\u043e\u0431\u044b\u0442\u0438\u044f:"
+    if message:
+        await message.reply_text(
+            text,
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+        )
+    else:
+        await context.bot.send_message(
+            text=text,
+            user_id=user.id,
+            attachments=reply_markup.to_attachments(),
+            fmt="html",
+        )
 
 
 async def build_day_view(user_id: int, year: int, month: int, day: int, tz_name: str) -> tuple[str, InlineKeyboardMarkup]:
