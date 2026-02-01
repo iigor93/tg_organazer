@@ -29,6 +29,11 @@ def _parse_message(data: dict | None, api: MaxApi) -> MaxMessage | None:
     for attachment in attachments:
         att_type = attachment.get("type")
         payload = attachment.get("payload") or attachment.get("body") or {}
+        lat = attachment.get("lat") or attachment.get("latitude")
+        lon = attachment.get("lon") or attachment.get("longitude")
+        if lat is not None and lon is not None:
+            location = {"latitude": lat, "longitude": lon}
+            break
         lat = payload.get("lat") or payload.get("latitude")
         lon = payload.get("lon") or payload.get("longitude")
         if lat is not None and lon is not None:
