@@ -179,13 +179,18 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
         return
 
     text = (update.message.text or "").strip()
-    if text.startswith("/start") or text.strip().lower() == "??????":
+    normalized = text.strip().lower()
+    if text.startswith("/start") or normalized == "??????":
         await start(update, context)
     elif text.startswith("/help"):
         await handle_help(update, context)
     elif text.startswith("/team"):
         await handle_team_command(update, context)
+    elif text.startswith("/calendar") or text.startswith("/show_calendar"):
+        await show_calendar(update, context)
     elif text == MAIN_MENU_CALENDAR_TEXT:
+        await show_calendar(update, context)
+    elif normalized == "???????? ?????????":
         await show_calendar(update, context)
     elif text == MAIN_MENU_UPCOMING_TEXT:
         await show_upcoming_events(update, context)
