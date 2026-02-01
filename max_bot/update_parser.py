@@ -88,6 +88,7 @@ def parse_update(raw_update: dict[str, Any], api: MaxApi) -> MaxUpdate | None:
         return MaxUpdate(message=message)
 
     if update_type in {"message_created", "message_edited"}:
+        logger.info("RAW MAX message_data: %s", message_data)
         message = _parse_message(message_data, api)
         if not message:
             return None
