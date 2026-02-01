@@ -10,6 +10,11 @@ NEAREST_EVENTS_DAYS = 10
 
 
 TOKEN = os.getenv("TG_BOT_TOKEN")
+MAX_BOT_TOKEN = os.getenv("MAX_BOT_TOKEN")
+MAX_API_BASE = os.getenv("MAX_API_BASE", "https://platform-api.max.ru")
+MAX_WEBHOOK_URL = os.getenv("MAX_WEBHOOK_URL")
+MAX_WEBHOOK_SECRET = os.getenv("MAX_WEBHOOK_SECRET")
+MAX_POLL_TIMEOUT = int(os.getenv("MAX_POLL_TIMEOUT", "30"))
 
 
 LOCAL = os.getenv("LOCAL")

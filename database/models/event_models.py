@@ -22,8 +22,10 @@ class DbEvent(Base):
     annual_day = Column(Integer, nullable=True, comment="День, если событие ежегодное, UTC")
     annual_month = Column(Integer, nullable=True, comment="Месяц, если событие ежегодное, UTC")
 
-    tg_id = Column(BigInteger, nullable=False, comment="Юзер тг id, кому принадлежит событие")
+    tg_id = Column(BigInteger, nullable=True, comment="Юзер тг id, кому принадлежит событие")
+    max_id = Column(BigInteger, nullable=True, comment="MAX user id")
     creator_tg_id = Column(BigInteger, nullable=True, comment="Creator tg id")
+    creator_max_id = Column(BigInteger, nullable=True, comment="Creator max id")
     canceled_events = relationship("CanceledEvent", back_populates="event", lazy="selectin", uselist=True, cascade="all, delete-orphan")
     participants = relationship("EventParticipant", back_populates="event", lazy="selectin", uselist=True, cascade="all, delete-orphan")
 
@@ -45,7 +47,8 @@ class EventParticipant(Base):
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     event_id = Column(Integer, ForeignKey(DbEvent.id, ondelete="CASCADE"))
-    participant_tg_id = Column(BigInteger, nullable=False, comment="ID участника")
+    participant_tg_id = Column(BigInteger, nullable=True, comment="ID участника")
+    participant_max_id = Column(BigInteger, nullable=True, comment="MAX participant id")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

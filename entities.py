@@ -41,8 +41,10 @@ class Event(BaseModel):
     recurrent: Recurrent = Recurrent.never
     participants: list[int | None] = Field(default_factory=list)
     all_user_participants: dict[int, str] = Field(default_factory=dict)
-    tg_id: int
+    tg_id: int | None = None
     creator_tg_id: int | None = None
+    max_id: int | None = None
+    creator_max_id: int | None = None
 
     def get_date(self) -> tuple[int, int, int]:
         return self.event_date.year, self.event_date.month, self.event_date.day
@@ -65,6 +67,26 @@ class TgUser(BaseModel):
 
     @model_validator(mode="after")
     def names(self) -> "TgUser":
+        if self.title:
+            self.username = self.first_name = self.title
+
+        return self
+
+
+class MaxUser(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    max_id: int = Field(int, alias="id")
+    is_active: bool = True
+    username: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    language_code: str | None = None
+    time_zone: str | None = None
+    title: str | None = None
+
+    @model_validator(mode="after")
+    def names(self) -> "MaxUser":
         if self.title:
             self.username = self.first_name = self.title
 
