@@ -134,7 +134,7 @@ async def handle_skip(update: MaxUpdate, context: MaxContext) -> None:
 
 
 async def show_main_menu_keyboard(message: MaxMessage) -> None:
-    keyboard = [[MAIN_MENU_CALENDAR_TEXT], [MAIN_MENU_UPCOMING_TEXT]]
+    keyboard = [[KeyboardButton(MAIN_MENU_CALENDAR_TEXT)], [KeyboardButton(MAIN_MENU_UPCOMING_TEXT)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
     await message.reply_text("Меню:", reply_markup=reply_markup)
 
@@ -142,7 +142,7 @@ async def show_main_menu_keyboard(message: MaxMessage) -> None:
 async def show_main_menu(message: MaxMessage, add_text: str | None = None) -> None:
     logger.info("show_main_menu")
 
-    keyboard = [[MAIN_MENU_CALENDAR_TEXT], [MAIN_MENU_UPCOMING_TEXT]]
+    keyboard = [[KeyboardButton(MAIN_MENU_CALENDAR_TEXT)], [KeyboardButton(MAIN_MENU_UPCOMING_TEXT)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
     text = f"{add_text}\n\nВыберите действие:" if add_text else "Выберите действие:"
 
