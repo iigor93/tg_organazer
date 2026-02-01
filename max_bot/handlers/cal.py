@@ -12,6 +12,7 @@ from database.db_controller import db_controller
 from entities import MaxUser
 
 logger = logging.getLogger(__name__)
+EMPTY_DAY_TEXT = "."
 
 
 def to_superscript(number: int) -> str:
@@ -47,7 +48,7 @@ async def generate_calendar(user_id: int, year: int, month: int, tz_name: str = 
     week = []
 
     for _ in range(first_weekday):
-        week.append(InlineKeyboardButton(" ", callback_data="cal_ignore"))
+        week.append(InlineKeyboardButton(EMPTY_DAY_TEXT, callback_data="cal_ignore"))
 
     for day in range(1, num_days + 1):
         number_events = event_dict.get(day)
@@ -60,7 +61,7 @@ async def generate_calendar(user_id: int, year: int, month: int, tz_name: str = 
 
     if week:
         for _ in range(7 - len(week)):
-            week.append(InlineKeyboardButton(" ", callback_data="cal_ignore"))
+            week.append(InlineKeyboardButton(EMPTY_DAY_TEXT, callback_data="cal_ignore"))
         keyboard.append(week)
 
     return InlineKeyboardMarkup(keyboard)
