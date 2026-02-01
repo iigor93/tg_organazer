@@ -25,11 +25,16 @@ def _parse_message(data: dict | None, api: MaxApi) -> MaxMessage | None:
     text = body.get("text")
     location = None
     contact = None
-    attachments = body.get("attachments") or []
+    attachments = body.get("attachments") or data.get("attachments") or []
     for attachment in attachments:
         att_type = attachment.get("type")
-        if att_type not in {"geo_location", "location"}:
-            payload = attachment.get("payload") or {}
+        payload = attachment.get("payload") or attachment.get("body") or {}
+        lat = payload.get("lat") or payload.get("latitude")
+        lon = payload.get("lon") or payload.get("longitude")
+        if lat is not None and lon is not None:
+            location = {"latitude": lat, "longitude": lon}
+            break
+        if att_type not in {"geo_location", "location", "geolocation", "geo", "shared_location"}:
             if att_type in {"contact", "shared_contact", "user_contact"} or payload.get("phone") or payload.get("phone_number"):
                 contact = {
                     "user_id": payload.get("user_id") or payload.get("id"),
@@ -38,7 +43,6 @@ def _parse_message(data: dict | None, api: MaxApi) -> MaxMessage | None:
                     "phone_number": payload.get("phone_number") or payload.get("phone"),
                 }
             continue
-        payload = attachment.get("payload") or {}
         lat = payload.get("lat") or payload.get("latitude")
         lon = payload.get("lon") or payload.get("longitude")
         if lat is not None and lon is not None:
