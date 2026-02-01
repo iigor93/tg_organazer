@@ -112,6 +112,7 @@ async def handle_contact(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("handle_contact")
 
     contact = getattr(update.message, "contact", None)
+    logger.info("MAX contact payload: %s", contact)
     if isinstance(contact, dict):
         class _Contact:
             pass
@@ -122,6 +123,11 @@ async def handle_contact(update: MaxUpdate, context: MaxContext) -> None:
         normalized.last_name = contact.get("last_name")
         normalized.phone_number = contact.get("phone_number") or contact.get("phone")
         contact = normalized
+    if contact and contact.user_id:
+        try:
+            contact.user_id = int(contact.user_id)
+        except (TypeError, ValueError):
+            logger.info("MAX contact user_id not numeric: %s", contact.user_id)
     if contact and not contact.user_id:
         await update.message.reply_text("Похоже этот номер не зарегистрирован в телеграмм!")
     elif contact:
