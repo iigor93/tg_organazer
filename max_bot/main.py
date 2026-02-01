@@ -188,10 +188,14 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
         await handle_team_command(update, context)
     elif text.startswith("/calendar") or text.startswith("/show_calendar"):
         await show_calendar(update, context)
+    elif text.startswith("/show_my_id") or text.startswith("/my_id"):
+        await update.message.reply_text(f"Your ID: {update.effective_chat.id}")
     elif text == MAIN_MENU_CALENDAR_TEXT:
         await show_calendar(update, context)
     elif normalized == "???????? ?????????":
         await show_calendar(update, context)
+    elif normalized in {"my id", "show my id"}:
+        await update.message.reply_text(f"Your ID: {update.effective_chat.id}")
     elif text == MAIN_MENU_UPCOMING_TEXT:
         await show_upcoming_events(update, context)
     elif text == SKIP_LOCATION_TEXT:
