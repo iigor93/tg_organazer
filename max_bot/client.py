@@ -26,7 +26,14 @@ class MaxApi:
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError:
-            logger.exception("MAX API error %s %s: %s", method, path, response.text)
+            logger.exception(
+                "MAX API error %s %s: %s | params=%s payload=%s",
+                method,
+                path,
+                response.text,
+                params,
+                payload,
+            )
             raise
         return response.json() if response.text else {}
 
