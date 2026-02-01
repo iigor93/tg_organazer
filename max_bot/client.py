@@ -65,11 +65,13 @@ class MaxApi:
         if disable_link_preview is not None:
             params["disable_link_preview"] = disable_link_preview
 
-        payload: dict[str, Any] = {"text": text}
+        body: dict[str, Any] = {"text": text}
         if attachments is not None:
-            payload["attachments"] = attachments
+            body["attachments"] = attachments
         if fmt:
-            payload["format"] = fmt
+            body["format"] = fmt
+
+        payload: dict[str, Any] = {"body": body}
         if notify is not None:
             payload["notify"] = notify
 
@@ -84,13 +86,15 @@ class MaxApi:
         notify: bool | None = True,
     ) -> dict:
         params = {"message_id": message_id}
-        payload: dict[str, Any] = {}
+        body: dict[str, Any] = {}
         if text is not None:
-            payload["text"] = text
+            body["text"] = text
         if attachments is not None:
-            payload["attachments"] = attachments
+            body["attachments"] = attachments
         if fmt:
-            payload["format"] = fmt
+            body["format"] = fmt
+
+        payload: dict[str, Any] = {"body": body}
         if notify is not None:
             payload["notify"] = notify
 
