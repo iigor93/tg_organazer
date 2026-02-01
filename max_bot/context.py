@@ -30,6 +30,7 @@ class MaxMessage:
     id: str | int
     text: str | None
     location: dict | None
+    contact: dict | None
     sender: MaxChat
     recipient: MaxChat | None
     bot: MaxApi
@@ -71,6 +72,7 @@ class MaxMessage:
             id=message_id,
             text=text,
             location=None,
+            contact=None,
             sender=self.sender,
             recipient=self.recipient,
             bot=self.bot,

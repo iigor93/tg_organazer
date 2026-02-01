@@ -10,7 +10,7 @@ from max_bot.context import MaxContext, MaxUpdate
 from max_bot.state import chat_state
 from max_bot.update_parser import parse_update
 from max_bot.handlers.cal import handle_calendar_callback, show_calendar
-from max_bot.handlers.contacts import handle_team_callback, handle_team_command
+from max_bot.handlers.contacts import handle_contact, handle_team_callback, handle_team_command
 from max_bot.handlers.events import (
     _get_back_button_state,
     generate_time_selector,
@@ -173,6 +173,9 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
 
     if update.message.location:
         await handle_location(update, context)
+        return
+    if update.message.contact:
+        await handle_contact(update, context)
         return
 
     text = (update.message.text or "").strip()

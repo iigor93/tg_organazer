@@ -24,10 +24,19 @@ def _parse_message(data: dict | None, api: MaxApi) -> MaxMessage | None:
     message_id = data.get("id") or data.get("message_id") or body.get("mid") or body.get("message_id") or 0
     text = body.get("text")
     location = None
+    contact = None
     attachments = body.get("attachments") or []
     for attachment in attachments:
         att_type = attachment.get("type")
         if att_type not in {"geo_location", "location"}:
+            payload = attachment.get("payload") or {}
+            if att_type in {"contact", "shared_contact", "user_contact"} or payload.get("phone") or payload.get("phone_number"):
+                contact = {
+                    "user_id": payload.get("user_id") or payload.get("id"),
+                    "first_name": payload.get("first_name") or payload.get("name"),
+                    "last_name": payload.get("last_name"),
+                    "phone_number": payload.get("phone_number") or payload.get("phone"),
+                }
             continue
         payload = attachment.get("payload") or {}
         lat = payload.get("lat") or payload.get("latitude")
@@ -37,7 +46,7 @@ def _parse_message(data: dict | None, api: MaxApi) -> MaxMessage | None:
             break
     sender = _parse_user(data.get("sender"))
     recipient = _parse_user(data.get("recipient")) if data.get("recipient") else None
-    return MaxMessage(id=message_id, text=text, location=location, sender=sender, recipient=recipient, bot=api)
+    return MaxMessage(id=message_id, text=text, location=location, contact=contact, sender=sender, recipient=recipient, bot=api)
 
 
 def _extract_callback_payload(update: dict[str, Any]) -> str | None:
