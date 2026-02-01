@@ -15,6 +15,7 @@ class MaxChat:
     id: str | int
     first_name: str | None = None
     last_name: str | None = None
+    is_bot: bool | None = None
     type: str = "private"
 
     @property
@@ -26,7 +27,7 @@ class MaxChat:
 
 @dataclass
 class MaxMessage:
-    id: int
+    id: str | int
     text: str | None
     location: dict | None
     sender: MaxChat
@@ -39,6 +40,10 @@ class MaxMessage:
 
     @property
     def chat_id(self) -> int:
+        if self.recipient and self.recipient.is_bot is False:
+            return self.recipient.id
+        if self.sender and self.sender.is_bot is False:
+            return self.sender.id
         return self.recipient.id if self.recipient else self.sender.id
 
     async def reply_text(
@@ -50,7 +55,12 @@ class MaxMessage:
         fmt = None
         if parse_mode == "HTML":
             fmt = "html"
-        target_user_id = self.recipient.id if self.recipient else self.sender.id
+        if self.recipient and self.recipient.is_bot is False:
+            target_user_id = self.recipient.id
+        elif self.sender and self.sender.is_bot is False:
+            target_user_id = self.sender.id
+        else:
+            target_user_id = self.recipient.id if self.recipient else self.sender.id
         response = await self.bot.send_message(text=text, user_id=target_user_id, attachments=attachments, fmt=fmt)
         message_data = response.get("message") if isinstance(response, dict) else None
         if not message_data:

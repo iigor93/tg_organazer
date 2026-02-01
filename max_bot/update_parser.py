@@ -13,7 +13,8 @@ def _parse_user(data: dict | None) -> MaxChat:
     user_id = data.get("id") or data.get("user_id") or 0
     first_name = data.get("name") or data.get("first_name")
     last_name = data.get("last_name")
-    return MaxChat(id=int(user_id), first_name=first_name, last_name=last_name)
+    is_bot = data.get("is_bot")
+    return MaxChat(id=int(user_id), first_name=first_name, last_name=last_name, is_bot=is_bot)
 
 
 def _parse_message(data: dict | None, api: MaxApi) -> MaxMessage | None:
@@ -67,7 +68,12 @@ def parse_update(raw_update: dict[str, Any], api: MaxApi) -> MaxUpdate | None:
         message = _parse_message(message_data, api)
         payload = _extract_callback_payload(raw_update)
         user_data = raw_update.get("user") or raw_update.get("sender")
-        from_user = _parse_user(user_data) if user_data else (message.sender if message else MaxChat(id=0))
+        if user_data:
+            from_user = _parse_user(user_data)
+        elif message and message.recipient and not message.recipient.is_bot:
+            from_user = message.recipient
+        else:
+            from_user = message.sender if message else MaxChat(id=0)
         if not payload:
             logger.warning("Missing callback payload: %s", raw_update)
             return None
