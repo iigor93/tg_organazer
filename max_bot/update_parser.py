@@ -84,6 +84,10 @@ def parse_update(raw_update: dict[str, Any], api: MaxApi) -> MaxUpdate | None:
         message = _parse_message(message_data, api)
         if not message:
             return None
+        body = message_data.get("body") or {}
+        raw_attachments = body.get("attachments") or message_data.get("attachments")
+        if raw_attachments and not message.location and not message.contact:
+            logger.info("MAX message without parsed attachments: %s", message_data)
         return MaxUpdate(message=message)
 
     if update_type == "message_callback":
