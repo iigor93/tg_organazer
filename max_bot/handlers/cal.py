@@ -148,7 +148,9 @@ async def show_calendar(update: MaxUpdate, context: MaxContext) -> None:
         ]
     )
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    keyboard.append([InlineKeyboardButton("??? ID", callback_data="show_my_id")])
+
+reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
         "📅 Выберите дату события:",
@@ -250,5 +252,7 @@ async def handle_calendar_callback(update: MaxUpdate, context: MaxContext) -> No
         text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
+    elif data == "show_my_id":
+        await query.message.reply_text(f"??? ID: {user.id}")
     elif data == "cal_ignore":
         pass
