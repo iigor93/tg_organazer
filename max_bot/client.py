@@ -72,6 +72,26 @@ class MaxApi:
         if disable_link_preview is not None:
             params["disable_link_preview"] = disable_link_preview
 
+        menu_text = "Меню"
+        menu_payload = "menu_open"
+        menu_button = {"type": "callback", "text": menu_text, "payload": menu_payload}
+        if attachments is None:
+            attachments = [{"type": "inline_keyboard", "payload": {"buttons": [[menu_button]]}}]
+        else:
+            inline_keyboard = None
+            for att in attachments:
+                if att.get("type") == "inline_keyboard":
+                    inline_keyboard = att
+                    break
+            if inline_keyboard is None:
+                attachments.append({"type": "inline_keyboard", "payload": {"buttons": [[menu_button]]}})
+            else:
+                payload = inline_keyboard.setdefault("payload", {})
+                buttons = payload.setdefault("buttons", [])
+                has_menu = any(btn.get("text") == menu_text and btn.get("payload") == menu_payload for row in buttons for btn in row)
+                if not has_menu:
+                    buttons.append([menu_button])
+
         payload: dict[str, Any] = {"text": text}
         if attachments is not None:
             payload["attachments"] = attachments

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from max_bot.client import MaxApi
-from max_bot.compat import InlineKeyboardMarkup, ReplyKeyboardMarkup
+from max_bot.compat import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,23 @@ class MaxMessage:
     async def reply_text(
         self, text: str, reply_markup: InlineKeyboardMarkup | ReplyKeyboardMarkup | None = None, parse_mode: str | None = None
     ) -> "MaxMessage | None":
+        menu_text = "Меню"
+        menu_callback = "menu_open"
+        if reply_markup is None:
+            reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(menu_text, callback_data=menu_callback)]])
+        elif isinstance(reply_markup, InlineKeyboardMarkup):
+            has_menu = any(
+                btn.text == menu_text and (btn.callback_data == menu_callback or btn.callback_data is None)
+                for row in reply_markup.inline_keyboard
+                for btn in row
+            )
+            if not has_menu:
+                reply_markup.inline_keyboard.append([InlineKeyboardButton(menu_text, callback_data=menu_callback)])
+        elif isinstance(reply_markup, ReplyKeyboardMarkup):
+            has_menu = any(btn.text == menu_text for row in reply_markup.keyboard for btn in row)
+            if not has_menu:
+                reply_markup.keyboard.append([KeyboardButton(menu_text)])
+
         attachments = None
         if reply_markup:
             attachments = reply_markup.to_attachments()

@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 from config import MAX_POLL_TIMEOUT
 from max_bot.client import build_max_api
+from max_bot.compat import InlineKeyboardButton, InlineKeyboardMarkup
 from max_bot.context import MaxContext, MaxUpdate
 from max_bot.state import chat_state
 from max_bot.update_parser import parse_update
@@ -38,6 +39,24 @@ from max_bot.handlers.start import (
 load_dotenv(".env")
 
 logger = logging.getLogger(__name__)
+MENU_TEXT = "Меню"
+MENU_CALENDAR_TEXT = "Календарь"
+MENU_UPCOMING_TEXT = "Ближайшие события"
+MENU_TEAM_TEXT = "Участники"
+MENU_MY_ID_TEXT = "Мой ID"
+MENU_HELP_TEXT = "Помощь"
+
+
+def build_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton(MENU_CALENDAR_TEXT, callback_data="menu_calendar")],
+            [InlineKeyboardButton(MENU_UPCOMING_TEXT, callback_data="menu_upcoming")],
+            [InlineKeyboardButton(MENU_TEAM_TEXT, callback_data="menu_team")],
+            [InlineKeyboardButton(MENU_MY_ID_TEXT, callback_data="menu_my_id")],
+            [InlineKeyboardButton(MENU_HELP_TEXT, callback_data="menu_help")],
+        ]
+    )
 
 
 async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
@@ -144,7 +163,19 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
 async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
     if update.callback_query:
         data = update.callback_query.data
-        if data.startswith("cal_"):
+        if data == "menu_open":
+            await update.callback_query.message.reply_text("Меню:", reply_markup=build_menu_markup())
+        elif data == "menu_calendar":
+            await show_calendar(update, context)
+        elif data == "menu_upcoming":
+            await show_upcoming_events(update, context)
+        elif data == "menu_team":
+            await handle_team_command(update, context)
+        elif data == "menu_my_id":
+            await update.callback_query.message.reply_text(f"Ваш ID: {update.effective_chat.id}")
+        elif data == "menu_help":
+            await handle_help(update, context)
+        elif data.startswith("cal_"):
             await handle_calendar_callback(update, context)
         elif data.startswith("time_"):
             await handle_time_callback(update, context)
@@ -189,19 +220,30 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
     elif text.startswith("/calendar") or text.startswith("/show_calendar"):
         await show_calendar(update, context)
     elif text.startswith("/show_my_id") or text.startswith("/my_id"):
-        await update.message.reply_text(f"Your ID: {update.effective_chat.id}")
-    elif text == MAIN_MENU_CALENDAR_TEXT:
+        await update.message.reply_text(f"Ваш ID: {update.effective_chat.id}")
+    elif normalized == MENU_TEXT.lower():
+        await update.message.reply_text("????:", reply_markup=build_menu_markup())
+    elif normalized == MENU_CALENDAR_TEXT.lower():
         await show_calendar(update, context)
     elif normalized == "???????? ?????????":
         await show_calendar(update, context)
-    elif normalized in {"my id", "show my id"}:
-        await update.message.reply_text(f"Your ID: {update.effective_chat.id}")
+    elif normalized == MENU_UPCOMING_TEXT.lower():
+        await show_upcoming_events(update, context)
+    elif normalized == MENU_TEAM_TEXT.lower():
+        await handle_team_command(update, context)
+    elif normalized == MENU_MY_ID_TEXT.lower() or normalized in {"??? id", "my id", "show my id"}:
+        await update.message.reply_text(f"Ваш ID: {update.effective_chat.id}")
+    elif normalized == MENU_HELP_TEXT.lower():
+        await handle_help(update, context)
+    elif text == MAIN_MENU_CALENDAR_TEXT:
+        await show_calendar(update, context)
     elif text == MAIN_MENU_UPCOMING_TEXT:
         await show_upcoming_events(update, context)
     elif text == SKIP_LOCATION_TEXT:
         await handle_skip(update, context)
     else:
         await handle_text(update, context)
+
 
 
 async def poll_updates() -> None:
