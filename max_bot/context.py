@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class MaxChat:
-    id: int
+    id: str | int
     first_name: str | None = None
     last_name: str | None = None
     type: str = "private"
@@ -34,7 +34,7 @@ class MaxMessage:
     bot: MaxApi
 
     @property
-    def message_id(self) -> int:
+    def message_id(self) -> str | int:
         return self.id
 
     @property
@@ -54,9 +54,10 @@ class MaxMessage:
         message_data = response.get("message") if isinstance(response, dict) else None
         if not message_data:
             return None
-        message_id = message_data.get("id") or message_data.get("message_id") or 0
+        body = message_data.get("body") or {}
+        message_id = message_data.get("id") or message_data.get("message_id") or body.get("mid") or body.get("message_id") or 0
         return MaxMessage(
-            id=int(message_id),
+            id=message_id,
             text=text,
             location=None,
             sender=self.sender,

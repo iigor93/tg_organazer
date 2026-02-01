@@ -19,8 +19,8 @@ def _parse_user(data: dict | None) -> MaxChat:
 def _parse_message(data: dict | None, api: MaxApi) -> MaxMessage | None:
     if not data:
         return None
-    message_id = data.get("id") or data.get("message_id") or 0
     body = data.get("body") or {}
+    message_id = data.get("id") or data.get("message_id") or body.get("mid") or body.get("message_id") or 0
     text = body.get("text")
     location = None
     attachments = body.get("attachments") or []

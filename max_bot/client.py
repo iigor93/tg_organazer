@@ -84,7 +84,7 @@ class MaxApi:
 
     async def edit_message(
         self,
-        message_id: int,
+        message_id: str | int,
         text: str | None = None,
         attachments: list[dict] | None = None,
         fmt: str | None = None,
