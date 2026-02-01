@@ -179,7 +179,7 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
         return
 
     text = (update.message.text or "").strip()
-    if text.startswith("/start") or text.strip().lower() == "начать":
+    if text.startswith("/start") or text.strip().lower() == "??????":
         await start(update, context)
     elif text.startswith("/help"):
         await handle_help(update, context)
@@ -204,7 +204,7 @@ async def poll_updates() -> None:
                 response = await api.get_updates(
                     marker=marker,
                     timeout=MAX_POLL_TIMEOUT,
-                    types=["message_created", "message_edited", "message_callback"],
+                    types=["message_created", "message_edited", "message_callback", "bot_started"],
                 )
             except Exception:  # noqa: BLE001
                 logger.exception("MAX poll error")

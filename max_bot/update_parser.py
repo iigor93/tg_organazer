@@ -67,6 +67,15 @@ def parse_update(raw_update: dict[str, Any], api: MaxApi) -> MaxUpdate | None:
     update_type = raw_update.get("update_type")
     message_data = raw_update.get("message")
 
+    if update_type == "bot_started":
+        user_data = raw_update.get("user") or raw_update.get("sender")
+        sender = _parse_user(user_data)
+        recipient_data = raw_update.get("recipient") or raw_update.get("bot")
+        recipient = _parse_user(recipient_data) if recipient_data else None
+        message_id = raw_update.get("id") or raw_update.get("message_id") or raw_update.get("event_id") or "bot_started"
+        message = MaxMessage(id=message_id, text="/start", location=None, contact=None, sender=sender, recipient=recipient, bot=api)
+        return MaxUpdate(message=message)
+
     if update_type in {"message_created", "message_edited"}:
         message = _parse_message(message_data, api)
         if not message:
