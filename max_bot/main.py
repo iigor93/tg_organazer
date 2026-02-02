@@ -39,12 +39,13 @@ from max_bot.handlers.start import (
 load_dotenv(".env")
 
 logger = logging.getLogger(__name__)
-MENU_TEXT = "Меню"
-MENU_CALENDAR_TEXT = "Календарь"
-MENU_UPCOMING_TEXT = "Ближайшие события"
-MENU_TEAM_TEXT = "Участники"
-MENU_MY_ID_TEXT = "Мой ID"
-MENU_HELP_TEXT = "Помощь"
+MENU_TEXT = "\u041c\u0435\u043d\u044e"
+MENU_CALENDAR_TEXT = "\u041a\u0430\u043b\u0435\u043d\u0434\u0430\u0440\u044c"
+MENU_UPCOMING_TEXT = "\u0411\u043b\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0441\u043e\u0431\u044b\u0442\u0438\u044f"
+MENU_TEAM_TEXT = "\u0423\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u0438"
+MENU_MY_ID_TEXT = "\u041c\u043e\u0439 ID"
+MENU_HELP_TEXT = "\u041f\u043e\u043c\u043e\u0449\u044c"
+MENU_BACK_TEXT = "\u21a9\u041d\u0430\u0437\u0430\u0434"
 
 
 def build_menu_markup() -> InlineKeyboardMarkup:
@@ -55,8 +56,24 @@ def build_menu_markup() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(MENU_TEAM_TEXT, callback_data="menu_team")],
             [InlineKeyboardButton(MENU_MY_ID_TEXT, callback_data="menu_my_id")],
             [InlineKeyboardButton(MENU_HELP_TEXT, callback_data="menu_help")],
+            [InlineKeyboardButton(MENU_BACK_TEXT, callback_data="menu_back")],
         ]
     )
+
+
+def _sanitize_attachments(attachments: list[dict] | None) -> list[dict] | None:
+    if not attachments:
+        return None
+    cleaned: list[dict] = []
+    for att in attachments:
+        if not isinstance(att, dict):
+            continue
+        att_copy = {k: v for k, v in att.items() if k != "callback_id"}
+        payload = att_copy.get("payload")
+        if isinstance(payload, dict) and "buttons" in payload:
+            att_copy["payload"] = {"buttons": payload.get("buttons", [])}
+        cleaned.append(att_copy)
+    return cleaned or None
 
 
 async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
@@ -164,7 +181,25 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
     if update.callback_query:
         data = update.callback_query.data
         if data == "menu_open":
-            await update.callback_query.message.reply_text("Меню:", reply_markup=build_menu_markup())
+            menu_message = update.callback_query.message
+            if menu_message:
+                context.chat_data["menu_back"] = {
+                    "message_id": menu_message.id,
+                    "text": menu_message.text or "",
+                    "attachments": _sanitize_attachments(menu_message.attachments),
+                }
+            await update.callback_query.edit_message_text("Меню:", reply_markup=build_menu_markup())
+        elif data == "menu_back":
+            state = context.chat_data.pop("menu_back", None)
+            menu_message = update.callback_query.message
+            if state and menu_message and state.get("message_id") == menu_message.id:
+                await context.bot.edit_message(
+                    message_id=menu_message.id,
+                    text=state.get("text") or "",
+                    attachments=state.get("attachments"),
+                )
+            else:
+                await update.callback_query.answer()
         elif data == "menu_calendar":
             await show_calendar(update, context)
         elif data == "menu_upcoming":

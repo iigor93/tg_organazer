@@ -59,7 +59,16 @@ def _parse_message(data: dict | None, api: MaxApi) -> MaxMessage | None:
             break
     sender = _parse_user(data.get("sender"))
     recipient = _parse_user(data.get("recipient")) if data.get("recipient") else None
-    return MaxMessage(id=message_id, text=text, location=location, contact=contact, sender=sender, recipient=recipient, bot=api)
+    return MaxMessage(
+        id=message_id,
+        text=text,
+        location=location,
+        contact=contact,
+        attachments=attachments if attachments else None,
+        sender=sender,
+        recipient=recipient,
+        bot=api,
+    )
 
 
 def _extract_callback_payload(update: dict[str, Any]) -> str | None:
@@ -86,7 +95,16 @@ def parse_update(raw_update: dict[str, Any], api: MaxApi) -> MaxUpdate | None:
         recipient_data = raw_update.get("recipient") or raw_update.get("bot")
         recipient = _parse_user(recipient_data) if recipient_data else None
         message_id = raw_update.get("id") or raw_update.get("message_id") or raw_update.get("event_id") or "bot_started"
-        message = MaxMessage(id=message_id, text="/start", location=None, contact=None, sender=sender, recipient=recipient, bot=api)
+        message = MaxMessage(
+            id=message_id,
+            text="/start",
+            location=None,
+            contact=None,
+            attachments=None,
+            sender=sender,
+            recipient=recipient,
+            bot=api,
+        )
         return MaxUpdate(message=message)
 
     if update_type in {"message_created", "message_edited"}:

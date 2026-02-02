@@ -239,7 +239,11 @@ async def handle_time_callback(update: MaxUpdate, context: MaxContext) -> None:
 
     if data.startswith("time_hour_set_"):
         _, _, _, time_type = data.split("_")
-        message = await query.message.reply_text("Введите часы (0-23):")
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Введите часы (0-23):",
+            include_menu=False,
+        )
         context.chat_data["await_time_input"] = {
             "field": "hour",
             "time_type": time_type,
@@ -252,7 +256,11 @@ async def handle_time_callback(update: MaxUpdate, context: MaxContext) -> None:
 
     if data.startswith("time_minute_set_"):
         _, _, _, time_type = data.split("_")
-        message = await query.message.reply_text("Введите минуты (0-59):")
+        message = await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Введите минуты (0-59):",
+            include_menu=False,
+        )
         context.chat_data["await_time_input"] = {
             "field": "minute",
             "time_type": time_type,
@@ -532,7 +540,11 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
             prompt_message_id = message.message_id
             prompt_chat_id = message.chat_id
         elif update.effective_chat:
-            message = await context.bot.send_message(chat_id=update.effective_chat.id, text="Опиши, что будет в событии:")
+            message = await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Опиши, что будет в событии:",
+                include_menu=False,
+            )
             prompt_message_id = message.message_id
             prompt_chat_id = message.chat_id
         context.chat_data["await_event_description"] = {

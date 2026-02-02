@@ -31,6 +31,7 @@ class MaxMessage:
     text: str | None
     location: dict | None
     contact: dict | None
+    attachments: list[dict] | None
     sender: MaxChat
     recipient: MaxChat | None
     bot: MaxApi
@@ -79,7 +80,12 @@ class MaxMessage:
             target_user_id = self.sender.id
         else:
             target_user_id = self.recipient.id if self.recipient else self.sender.id
-        response = await self.bot.send_message(text=text, user_id=target_user_id, attachments=attachments, fmt=fmt)
+        response = await self.bot.send_message(
+            text=text,
+            user_id=target_user_id,
+            attachments=attachments,
+            fmt=fmt,
+        )
         message_data = response.get("message") if isinstance(response, dict) else None
         if not message_data:
             return None
@@ -90,6 +96,7 @@ class MaxMessage:
             text=text,
             location=None,
             contact=None,
+            attachments=attachments,
             sender=self.sender,
             recipient=self.recipient,
             bot=self.bot,
