@@ -14,6 +14,7 @@ async def handle_link_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
 
     data = query.data or ""
+    logger.info("handle_link_callback data=%s chat_id=%s", data, getattr(update.effective_chat, "id", None))
     parts = data.split("_")
     if len(parts) < 5:
         await query.edit_message_text("Некорректный запрос.")
@@ -43,4 +44,5 @@ async def handle_link_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await db_controller.save_update_user(tg_user=tg_user)
 
     ok, message = await db_controller.link_tg_max(tg_id=tg_id, max_id=max_id)
+    logger.info("link_tg_max result ok=%s message=%s tg_id=%s max_id=%s", ok, message, tg_id, max_id)
     await query.edit_message_text(message)
