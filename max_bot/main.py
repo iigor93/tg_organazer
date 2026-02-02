@@ -179,7 +179,7 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
                 except Exception:  # noqa: BLE001
                     logger.exception("Failed to clear description prompt message")
 
-        if update.message and update.message.message_id:
+        if update.message and update.message.sender and update.message.sender.is_bot:
             try:
                 await context.bot.edit_message(message_id=update.message.message_id, text=" ", attachments=[])
             except Exception:  # noqa: BLE001
