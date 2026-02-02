@@ -32,6 +32,7 @@ from handlers.events import (
     handle_time_callback,
     show_upcoming_events,
 )
+from handlers.link import handle_link_callback
 from handlers.start import handle_help, handle_location, handle_skip, start
 
 load_dotenv(".env")
@@ -258,6 +259,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_event_participants_callback, pattern="^create_participant_event_"))
     application.add_handler(CallbackQueryHandler(handle_reschedule_event_callback, pattern="^reschedule_event_"))
     application.add_handler(CallbackQueryHandler(handle_emoji_callback, pattern="^emoji_"))
+    application.add_handler(CallbackQueryHandler(handle_link_callback, pattern="^link_tg_"))
     application.add_handler(MessageHandler(filters.Regex("^🗓 Ближайшие события$"), show_upcoming_events))
 
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))

@@ -4,7 +4,11 @@ import logging
 
 from dotenv import load_dotenv
 
-from config import MAX_POLL_TIMEOUT
+from telegram import InlineKeyboardButton as TgInlineKeyboardButton
+from telegram import InlineKeyboardMarkup as TgInlineKeyboardMarkup
+from telegram import Bot as TgBot
+
+from config import MAX_POLL_TIMEOUT, TOKEN
 from max_bot.client import build_max_api
 from max_bot.compat import InlineKeyboardButton, InlineKeyboardMarkup
 from max_bot.context import MaxContext, MaxUpdate
@@ -45,6 +49,7 @@ MENU_UPCOMING_TEXT = "\u0411\u043b\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0
 MENU_TEAM_TEXT = "\u0423\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u0438"
 MENU_MY_ID_TEXT = "\u041c\u043e\u0439 ID"
 MENU_HELP_TEXT = "\u041f\u043e\u043c\u043e\u0449\u044c"
+MENU_LINK_TG_TEXT = "\u0421\u0432\u044f\u0437\u0430\u0442\u044c \u0441 Telegram"
 MENU_BACK_TEXT = "\u21a9\u041d\u0430\u0437\u0430\u0434"
 
 
@@ -55,6 +60,7 @@ def build_menu_markup() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(MENU_UPCOMING_TEXT, callback_data="menu_upcoming")],
             [InlineKeyboardButton(MENU_TEAM_TEXT, callback_data="menu_team")],
             [InlineKeyboardButton(MENU_MY_ID_TEXT, callback_data="menu_my_id")],
+            [InlineKeyboardButton(MENU_LINK_TG_TEXT, callback_data="menu_link_tg")],
             [InlineKeyboardButton(MENU_HELP_TEXT, callback_data="menu_help")],
             [InlineKeyboardButton(MENU_BACK_TEXT, callback_data="menu_back")],
         ]
@@ -188,6 +194,37 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
         context.chat_data.pop("await_event_description", None)
         return
 
+    await_tg_link = context.chat_data.get("await_tg_link")
+    if await_tg_link:
+        raw_value = (update.message.text or "").strip()
+        if not raw_value.isdigit():
+            await update.message.reply_text("\u041e\u0442\u043f\u0440\u0430\u0432\u044c\u0442\u0435 \u0447\u0438\u0441\u043b\u043e\u0432\u043e\u0439 Telegram ID.")
+            return
+        tg_id = int(raw_value)
+        max_id = update.effective_chat.id
+        try:
+            tg_bot = TgBot(token=TOKEN)
+            buttons = [
+                [TgInlineKeyboardButton("\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c", callback_data=f"link_tg_confirm_{tg_id}_{max_id}")],
+                [TgInlineKeyboardButton("\u041e\u0442\u043a\u043b\u043e\u043d\u0438\u0442\u044c", callback_data=f"link_tg_decline_{tg_id}_{max_id}")],
+            ]
+            await tg_bot.send_message(
+                chat_id=tg_id,
+                text=(
+                    "\u041f\u0440\u0438\u0448\u0435\u043b \u0437\u0430\u043f\u0440\u043e\u0441 \u043d\u0430 \u0441\u0432\u044f\u0437\u044c \u0441 MAX \u0431\u043e\u0442\u043e\u043c.\n"
+                    "\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u043e\u0431\u044a\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435."
+                ),
+                reply_markup=TgInlineKeyboardMarkup(buttons),
+            )
+            await update.message.reply_text(
+                "\u0417\u0430\u043f\u0440\u043e\u0441 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d \u0432 Telegram. \u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u0432 Telegram \u0431\u043e\u0442\u0435."
+            )
+            context.chat_data.pop("await_tg_link", None)
+        except Exception:  # noqa: BLE001
+            logger.exception("Failed to send Telegram link request")
+            await update.message.reply_text("\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043f\u0440\u043e\u0441 \u0432 Telegram.")
+        return
+
     await update.message.reply_text("Unknown command.")
 
 
@@ -222,6 +259,12 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
             await handle_team_command(update, context)
         elif data == "menu_my_id":
             await update.callback_query.message.reply_text(f"Ваш ID: {update.effective_chat.id}")
+        elif data == "menu_link_tg":
+            context.chat_data["await_tg_link"] = True
+            await update.callback_query.message.reply_text(
+                "Для синхронизации событий с Telegram ботом FamPlanner_bot пришлите свой telegram ID.",
+                include_menu=False,
+            )
         elif data == "menu_help":
             await handle_help(update, context)
         elif data.startswith("cal_"):
@@ -260,7 +303,7 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
 
     text = (update.message.text or "").strip()
     normalized = text.strip().lower()
-    if text.startswith("/start") or normalized == "??????":
+    if text.startswith("/start") or normalized == "начать":
         await start(update, context)
     elif text.startswith("/help"):
         await handle_help(update, context)
@@ -271,17 +314,22 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
     elif text.startswith("/show_my_id") or text.startswith("/my_id"):
         await update.message.reply_text(f"Ваш ID: {update.effective_chat.id}")
     elif normalized == MENU_TEXT.lower():
-        await update.message.reply_text("????:", reply_markup=build_menu_markup())
+        await update.message.reply_text("Меню:", reply_markup=build_menu_markup())
     elif normalized == MENU_CALENDAR_TEXT.lower():
         await show_calendar(update, context)
-    elif normalized == "???????? ?????????":
+    elif normalized == "показать календарь":
         await show_calendar(update, context)
     elif normalized == MENU_UPCOMING_TEXT.lower():
         await show_upcoming_events(update, context)
     elif normalized == MENU_TEAM_TEXT.lower():
         await handle_team_command(update, context)
-    elif normalized == MENU_MY_ID_TEXT.lower() or normalized in {"мой id", "my id", "show my id"}:
+    elif normalized == MENU_MY_ID_TEXT.lower() or normalized in {"my id", "show my id"}:
         await update.message.reply_text(f"Ваш ID: {update.effective_chat.id}")
+    elif normalized == MENU_LINK_TG_TEXT.lower():
+        context.chat_data["await_tg_link"] = True
+        await update.message.reply_text(
+            "Для синхронизации событий с Telegram ботом FamPlanner_bot пришлите свой telegram ID."
+        )
     elif normalized == MENU_HELP_TEXT.lower():
         await handle_help(update, context)
     elif text == MAIN_MENU_CALENDAR_TEXT:

@@ -156,6 +156,62 @@ class DBController:
             return MaxUser.model_validate(user)
 
     @staticmethod
+    async def link_tg_max(tg_id: int, max_id: int) -> tuple[bool, str]:
+        async with AsyncSessionLocal() as session:
+            tg_user = (await session.execute(select(DB_User).where(DB_User.tg_id == tg_id))).scalar_one_or_none()
+            max_user = (await session.execute(select(DB_User).where(DB_User.max_id == max_id))).scalar_one_or_none()
+
+            if tg_user and tg_user.max_id and tg_user.max_id != max_id:
+                return False, "Этот Telegram ID уже связан с другим MAX ID."
+            if max_user and max_user.tg_id and max_user.tg_id != tg_id:
+                return False, "Этот MAX ID уже связан с другим Telegram ID."
+            if tg_user and max_user and tg_user.id != max_user.id:
+                return False, "Найдены две разные записи пользователя. Свяжите вручную."
+
+            if tg_user:
+                await session.execute(update(DB_User).where(DB_User.tg_id == tg_id).values(max_id=max_id))
+            elif max_user:
+                await session.execute(update(DB_User).where(DB_User.max_id == max_id).values(tg_id=tg_id))
+            else:
+                session.add(DB_User(tg_id=tg_id, max_id=max_id))
+
+            await session.commit()
+
+            await session.execute(
+                update(DbEvent)
+                .where(DbEvent.tg_id == tg_id, DbEvent.max_id.is_(None))
+                .values(max_id=max_id)
+            )
+            await session.execute(
+                update(DbEvent)
+                .where(DbEvent.max_id == max_id, DbEvent.tg_id.is_(None))
+                .values(tg_id=tg_id)
+            )
+            await session.execute(
+                update(DbEvent)
+                .where(DbEvent.creator_tg_id == tg_id, DbEvent.creator_max_id.is_(None))
+                .values(creator_max_id=max_id)
+            )
+            await session.execute(
+                update(DbEvent)
+                .where(DbEvent.creator_max_id == max_id, DbEvent.creator_tg_id.is_(None))
+                .values(creator_tg_id=tg_id)
+            )
+            await session.execute(
+                update(EventParticipant)
+                .where(EventParticipant.participant_tg_id == tg_id, EventParticipant.participant_max_id.is_(None))
+                .values(participant_max_id=max_id)
+            )
+            await session.execute(
+                update(EventParticipant)
+                .where(EventParticipant.participant_max_id == max_id, EventParticipant.participant_tg_id.is_(None))
+                .values(participant_tg_id=tg_id)
+            )
+            await session.commit()
+
+        return True, "Связь подтверждена."
+
+    @staticmethod
     async def get_users_short_names(tg_ids: list[int], platform: str | None = None) -> dict[int, str]:
         if not tg_ids:
             return {}
