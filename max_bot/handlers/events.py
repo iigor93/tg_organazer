@@ -73,6 +73,10 @@ def _get_back_button_state(context: MaxContext, event: Event, year: int, month: 
         return False, None
     return True, f"create_event_back_{year}_{month}_{day}"
 
+def _get_constructor_back(context: MaxContext, event: Event, year: int, month: int, day: int) -> tuple[bool, str | None]:
+    if context.chat_data.get("edit_event_id"):
+        return _get_back_button_state(context, event, year, month, day)
+    return True, f"create_event_back_{year}_{month}_{day}"
 
 def _build_delete_events_markup(
     events: list[tuple[str, int, bool]],
@@ -207,7 +211,7 @@ async def handle_emoji_callback(update: MaxUpdate, context: MaxContext) -> None:
 
     year, month, day = event.get_date()
     has_participants = bool(event.all_user_participants)
-    show_back_btn, back_callback_data = _get_back_button_state(context, event, year, month, day)
+    show_back_btn, back_callback_data = _get_constructor_back(context, event, year, month, day)
     text, reply_markup = get_event_constructor(
         event=event,
         year=year,
@@ -494,7 +498,7 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
                 context.chat_data["event"] = event
             year, month, day = event.get_date()
             has_participants = bool(event.all_user_participants)
-            show_back_btn, back_callback_data = _get_back_button_state(context, event, year, month, day)
+            show_back_btn, back_callback_data = _get_constructor_back(context, event, year, month, day)
             text, reply_markup = get_event_constructor(
                 event=event,
                 year=year,
@@ -572,7 +576,7 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
         context.chat_data["event"] = event
 
         has_participants = bool(event.all_user_participants)
-        show_back_btn, back_callback_data = _get_back_button_state(context, event, year, month, day)
+        show_back_btn, back_callback_data = _get_constructor_back(context, event, year, month, day)
         text, reply_markup = get_event_constructor(
             event=event,
             year=year,
@@ -736,7 +740,7 @@ async def handle_edit_event_callback(update: MaxUpdate, context: MaxContext) -> 
         )
     else:
         context.chat_data.pop("edit_event_readonly", None)
-        show_back_btn, back_callback_data = _get_back_button_state(context, event, year, month, day)
+        show_back_btn, back_callback_data = _get_constructor_back(context, event, year, month, day)
         text, reply_markup = get_event_constructor(
             event=event,
             year=year,
