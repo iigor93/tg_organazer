@@ -984,12 +984,31 @@ async def handle_event_participants_callback(update: MaxUpdate, context: MaxCont
         except Exception:
             logger.exception("Failed to delete event for participant cancel")
 
-        await query.edit_message_text(text="Событие не добавлено в календарь.")
+        await query.edit_message_text(text="??????? ?? ????????? ? ?????????.")
 
         if creator_id and update.effective_chat and creator_id != update.effective_chat.id:
-            user_name = update.effective_chat.full_name or update.effective_chat.first_name or "Участник"
+            participant_name = None
+            if db_user:
+                name_parts = [db_user.first_name, db_user.last_name]
+                participant_name = " ".join([part for part in name_parts if part])
+            if not participant_name:
+                participant_name = (
+                    update.effective_chat.full_name
+                    or update.effective_chat.first_name
+                    or update.effective_chat.username
+                    or str(update.effective_chat.id)
+                )
+            participant_name = (
+                str(participant_name).strip().title()
+                if participant_name else str(update.effective_chat.id)
+            )
             text = (
-                f"Участник {user_name} отказался от участия в событии: {event_info}"
+                f"???????? {participant_name} "
+                f"????????? "
+                f"?? "
+                f"??????? "
+                f"? "
+                f"???????: {event_info}"
             )
             try:
                 await context.bot.send_message(user_id=creator_id, text=text)
