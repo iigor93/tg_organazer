@@ -169,6 +169,13 @@ class DBController:
                 primary = tg_user
                 secondary = max_user
 
+                # Avoid unique constraint conflicts while merging.
+                await session.execute(
+                    update(DB_User)
+                    .where(DB_User.id == secondary.id)
+                    .values(tg_id=None, max_id=None)
+                )
+
                 merged_values: dict = {
                     "tg_id": tg_id,
                     "max_id": max_id,
