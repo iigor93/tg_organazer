@@ -239,36 +239,46 @@ async def handle_time_callback(update: MaxUpdate, context: MaxContext) -> None:
 
     if data.startswith("time_hour_set_"):
         _, _, _, time_type = data.split("_")
-        message = await context.bot.send_message(
-            user_id=update.effective_chat.id,
-            text="Введите часы (0-23):",
-            include_menu=False,
-        )
+        if query.message:
+            message = await query.message.reply_text(text="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0447\u0430\u0441\u044b (0-23):", include_menu=False)
+        else:
+            message = await context.bot.send_message(
+                user_id=update.effective_chat.id,
+                text="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0447\u0430\u0441\u044b (0-23):",
+                include_menu=False,
+            )
         context.chat_data["await_time_input"] = {
             "field": "hour",
             "time_type": time_type,
-            "prompt_message_id": message.message_id,
-            "prompt_chat_id": message.chat_id,
+            "prompt_message_id": getattr(message, "message_id", None),
+            "prompt_chat_id": getattr(message, "chat_id", None),
         }
-        context.chat_data["time_input_prompt_message_id"] = message.message_id
-        context.chat_data["time_input_prompt_chat_id"] = message.chat_id
+        if getattr(message, "message_id", None) is not None:
+            context.chat_data["time_input_prompt_message_id"] = message.message_id
+        if getattr(message, "chat_id", None) is not None:
+            context.chat_data["time_input_prompt_chat_id"] = message.chat_id
         return
 
     if data.startswith("time_minute_set_"):
         _, _, _, time_type = data.split("_")
-        message = await context.bot.send_message(
-            user_id=update.effective_chat.id,
-            text="Введите минуты (0-59):",
-            include_menu=False,
-        )
+        if query.message:
+            message = await query.message.reply_text(text="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043c\u0438\u043d\u0443\u0442\u044b (0-59):", include_menu=False)
+        else:
+            message = await context.bot.send_message(
+                user_id=update.effective_chat.id,
+                text="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043c\u0438\u043d\u0443\u0442\u044b (0-59):",
+                include_menu=False,
+            )
         context.chat_data["await_time_input"] = {
             "field": "minute",
             "time_type": time_type,
-            "prompt_message_id": message.message_id,
-            "prompt_chat_id": message.chat_id,
+            "prompt_message_id": getattr(message, "message_id", None),
+            "prompt_chat_id": getattr(message, "chat_id", None),
         }
-        context.chat_data["time_input_prompt_message_id"] = message.message_id
-        context.chat_data["time_input_prompt_chat_id"] = message.chat_id
+        if getattr(message, "message_id", None) is not None:
+            context.chat_data["time_input_prompt_message_id"] = message.message_id
+        if getattr(message, "chat_id", None) is not None:
+            context.chat_data["time_input_prompt_chat_id"] = message.chat_id
         return
 
     if data.startswith("time_hour_up_"):
