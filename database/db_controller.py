@@ -156,6 +156,14 @@ class DBController:
             return MaxUser.model_validate(user)
 
     @staticmethod
+    async def get_linked_tg_id(max_id: int) -> int | None:
+        async with AsyncSessionLocal() as session:
+            user = (await session.execute(select(DB_User).where(DB_User.max_id == max_id))).scalar_one_or_none()
+            if not user:
+                return None
+            return user.tg_id
+
+    @staticmethod
     async def link_tg_max(tg_id: int, max_id: int) -> tuple[bool, str]:
         async with AsyncSessionLocal() as session:
             tg_user = (await session.execute(select(DB_User).where(DB_User.tg_id == tg_id))).scalar_one_or_none()

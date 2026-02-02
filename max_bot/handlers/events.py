@@ -437,6 +437,12 @@ async def start_event_creation(
     )
     context.chat_data["event"] = event
 
+    linked_tg_id = await db_controller.get_linked_tg_id(max_id=update.effective_chat.id)
+    if linked_tg_id:
+        event.tg_id = linked_tg_id
+        event.creator_tg_id = linked_tg_id
+        context.chat_data["event"] = event
+
     participants = await db_controller.get_participants_with_status(tg_id=update.effective_chat.id, include_inactive=True, platform="max")
     context.chat_data["participants_status"] = {tg_id: is_active for tg_id, (_, is_active) in participants.items()}
     context.chat_data["event"].all_user_participants = {tg_id: name for tg_id, (name, _) in participants.items()}
@@ -644,6 +650,14 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
         edit_event_id = context.chat_data.pop("edit_event_id", None)
         context.chat_data.pop("edit_event_original", None)
         context.chat_data.pop("edit_event_readonly", None)
+        if event.tg_id is None or event.creator_tg_id is None:
+            linked_tg_id = await db_controller.get_linked_tg_id(max_id=update.effective_chat.id)
+            if linked_tg_id:
+                if event.tg_id is None:
+                    event.tg_id = linked_tg_id
+                if event.creator_tg_id is None:
+                    event.creator_tg_id = linked_tg_id
+
         if edit_event_id:
             event_id = await db_controller.update_event(event_id=edit_event_id, event=event, tz_name=db_user.time_zone)
         else:
