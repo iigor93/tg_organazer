@@ -35,7 +35,6 @@ async def handle_team_command(update: MaxUpdate, context: MaxContext) -> None:
     user_id = update.effective_chat.id
 
     participants = await db_controller.get_participants(tg_id=user_id, include_inactive=True, platform="max")
-    message = update.message or (update.callback_query.message if update.callback_query else None)
     if not participants:
         text = "У вас нет участников."
         if message:
@@ -179,7 +178,6 @@ async def handle_contact(update: MaxUpdate, context: MaxContext) -> None:
         event = context.chat_data.get("event")
         if event:
             participants = await db_controller.get_participants(
-    message = update.message or (update.callback_query.message if update.callback_query else None)
                 tg_id=update.effective_chat.id, include_inactive=True, platform="max"
             ) or {}
             event.all_user_participants = participants
