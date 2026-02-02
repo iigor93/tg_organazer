@@ -148,8 +148,6 @@ async def show_calendar(update: MaxUpdate, context: MaxContext) -> None:
         ]
     )
 
-    keyboard.append([InlineKeyboardButton("Мой ID", callback_data="show_my_id")])
-
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     message = update.message or (update.callback_query.message if update.callback_query else None)
@@ -262,7 +260,5 @@ async def handle_calendar_callback(update: MaxUpdate, context: MaxContext) -> No
         text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
-    elif data == "show_my_id":
-        await query.message.reply_text(f"Ваш ID: {user.id}")
     elif data == "cal_ignore":
         pass

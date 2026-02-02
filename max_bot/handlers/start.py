@@ -47,6 +47,7 @@ async def start(update: MaxUpdate, context: MaxContext) -> None:
         f"Привет, {user.first_name}!\n"
         "Для получения событий по твоему часовому поясу, тебе нужно поделиться геолокацией. Если ты живешь по Москоскому времени, то можешь нажать «Пропустить».",
         reply_markup=reply_markup,
+        include_menu=False,
     )
 
 

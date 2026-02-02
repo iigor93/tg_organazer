@@ -49,24 +49,29 @@ class MaxMessage:
         return self.recipient.id if self.recipient else self.sender.id
 
     async def reply_text(
-        self, text: str, reply_markup: InlineKeyboardMarkup | ReplyKeyboardMarkup | None = None, parse_mode: str | None = None
+        self,
+        text: str,
+        reply_markup: InlineKeyboardMarkup | ReplyKeyboardMarkup | None = None,
+        parse_mode: str | None = None,
+        include_menu: bool = True,
     ) -> "MaxMessage | None":
-        menu_text = "Меню"
-        menu_callback = "menu_open"
-        if reply_markup is None:
-            reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(menu_text, callback_data=menu_callback)]])
-        elif isinstance(reply_markup, InlineKeyboardMarkup):
-            has_menu = any(
-                btn.text == menu_text and (btn.callback_data == menu_callback or btn.callback_data is None)
-                for row in reply_markup.inline_keyboard
-                for btn in row
-            )
-            if not has_menu:
-                reply_markup.inline_keyboard.append([InlineKeyboardButton(menu_text, callback_data=menu_callback)])
-        elif isinstance(reply_markup, ReplyKeyboardMarkup):
-            has_menu = any(btn.text == menu_text for row in reply_markup.keyboard for btn in row)
-            if not has_menu:
-                reply_markup.keyboard.append([KeyboardButton(menu_text)])
+        if include_menu:
+            menu_text = "\u041c\u0435\u043d\u044e"
+            menu_callback = "menu_open"
+            if reply_markup is None:
+                reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(menu_text, callback_data=menu_callback)]])
+            elif isinstance(reply_markup, InlineKeyboardMarkup):
+                has_menu = any(
+                    btn.text == menu_text and (btn.callback_data == menu_callback or btn.callback_data is None)
+                    for row in reply_markup.inline_keyboard
+                    for btn in row
+                )
+                if not has_menu:
+                    reply_markup.inline_keyboard.append([InlineKeyboardButton(menu_text, callback_data=menu_callback)])
+            elif isinstance(reply_markup, ReplyKeyboardMarkup):
+                has_menu = any(btn.text == menu_text for row in reply_markup.keyboard for btn in row)
+                if not has_menu:
+                    reply_markup.keyboard.append([KeyboardButton(menu_text)])
 
         attachments = None
         if reply_markup:
@@ -85,6 +90,7 @@ class MaxMessage:
             user_id=target_user_id,
             attachments=attachments,
             fmt=fmt,
+            include_menu=include_menu,
         )
         message_data = response.get("message") if isinstance(response, dict) else None
         if not message_data:
