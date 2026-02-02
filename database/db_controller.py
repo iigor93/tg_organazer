@@ -396,6 +396,15 @@ class DBController:
         if event.stop_time:
             stop_datetime_tz = datetime.combine(event.event_date, event.stop_time).replace(tzinfo=user_tz).astimezone(timezone.utc)
 
+        if event.max_id and (event.tg_id is None or event.creator_tg_id is None):
+            async with AsyncSessionLocal() as session:
+                user = (await session.execute(select(DB_User).where(DB_User.max_id == event.max_id))).scalar_one_or_none()
+                if user and user.tg_id:
+                    if event.tg_id is None:
+                        event.tg_id = user.tg_id
+                    if event.creator_tg_id is None:
+                        event.creator_tg_id = user.tg_id
+
         creator_tg_id = event.creator_tg_id if event.creator_tg_id is not None else event.tg_id
         creator_max_id = event.creator_max_id if event.creator_max_id is not None else event.max_id
         new_event = DbEvent(
