@@ -2,11 +2,8 @@ import asyncio
 import datetime
 import logging
 
+import httpx
 from dotenv import load_dotenv
-
-from telegram import InlineKeyboardButton as TgInlineKeyboardButton
-from telegram import InlineKeyboardMarkup as TgInlineKeyboardMarkup
-from telegram import Bot as TgBot
 
 from config import MAX_POLL_TIMEOUT, TOKEN
 from max_bot.client import build_max_api
@@ -80,6 +77,38 @@ def _sanitize_attachments(attachments: list[dict] | None) -> list[dict] | None:
             att_copy["payload"] = {"buttons": payload.get("buttons", [])}
         cleaned.append(att_copy)
     return cleaned or None
+
+
+async def _send_tg_link_request(tg_id: int, max_id: int) -> None:
+    if not TOKEN:
+        raise RuntimeError("TG_BOT_TOKEN is not set")
+    payload = {
+        "chat_id": tg_id,
+        "text": (
+            "\u041f\u0440\u0438\u0448\u0435\u043b \u0437\u0430\u043f\u0440\u043e\u0441 \u043d\u0430 \u0441\u0432\u044f\u0437\u044c "
+            "\u0441 MAX \u0431\u043e\u0442\u043e\u043c.\n"
+            "\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u043e\u0431\u044a\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435."
+        ),
+        "reply_markup": {
+            "inline_keyboard": [
+                [
+                    {
+                        "text": "\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c",
+                        "callback_data": f"link_tg_confirm_{tg_id}_{max_id}",
+                    }
+                ],
+                [
+                    {
+                        "text": "\u041e\u0442\u043a\u043b\u043e\u043d\u0438\u0442\u044c",
+                        "callback_data": f"link_tg_decline_{tg_id}_{max_id}",
+                    }
+                ],
+            ]
+        },
+    }
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json=payload)
+        response.raise_for_status()
 
 
 async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
@@ -203,19 +232,7 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
         tg_id = int(raw_value)
         max_id = update.effective_chat.id
         try:
-            tg_bot = TgBot(token=TOKEN)
-            buttons = [
-                [TgInlineKeyboardButton("\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c", callback_data=f"link_tg_confirm_{tg_id}_{max_id}")],
-                [TgInlineKeyboardButton("\u041e\u0442\u043a\u043b\u043e\u043d\u0438\u0442\u044c", callback_data=f"link_tg_decline_{tg_id}_{max_id}")],
-            ]
-            await tg_bot.send_message(
-                chat_id=tg_id,
-                text=(
-                    "\u041f\u0440\u0438\u0448\u0435\u043b \u0437\u0430\u043f\u0440\u043e\u0441 \u043d\u0430 \u0441\u0432\u044f\u0437\u044c \u0441 MAX \u0431\u043e\u0442\u043e\u043c.\n"
-                    "\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u043e\u0431\u044a\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435."
-                ),
-                reply_markup=TgInlineKeyboardMarkup(buttons),
-            )
+            await _send_tg_link_request(tg_id=tg_id, max_id=max_id)
             await update.message.reply_text(
                 "\u0417\u0430\u043f\u0440\u043e\u0441 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d \u0432 Telegram. \u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u0432 Telegram \u0431\u043e\u0442\u0435."
             )
