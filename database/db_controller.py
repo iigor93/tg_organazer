@@ -396,8 +396,8 @@ class DBController:
         if event.stop_time:
             stop_datetime_tz = datetime.combine(event.event_date, event.stop_time).replace(tzinfo=user_tz).astimezone(timezone.utc)
 
-        if event.max_id and (event.tg_id is None or event.creator_tg_id is None):
-            async with AsyncSessionLocal() as session:
+        async with AsyncSessionLocal() as session:
+            if event.max_id and (event.tg_id is None or event.creator_tg_id is None):
                 user = (await session.execute(select(DB_User).where(DB_User.max_id == event.max_id))).scalar_one_or_none()
                 if user and user.tg_id:
                     if event.tg_id is None:
@@ -405,26 +405,25 @@ class DBController:
                     if event.creator_tg_id is None:
                         event.creator_tg_id = user.tg_id
 
-        creator_tg_id = event.creator_tg_id if event.creator_tg_id is not None else event.tg_id
-        creator_max_id = event.creator_max_id if event.creator_max_id is not None else event.max_id
-        new_event = DbEvent(
-            description=event.description,
-            emoji=event.emoji,
-            start_time=start_datetime_tz.time(),
-            single_event=True if event.recurrent == Recurrent.never else False,
-            daily=True if event.recurrent == Recurrent.daily else False,
-            weekly=start_datetime_tz.weekday() if event.recurrent == Recurrent.weekly else None,
-            monthly=start_datetime_tz.day if event.recurrent == Recurrent.monthly else None,
-            annual_day=start_datetime_tz.day if event.recurrent == Recurrent.annual else None,
-            annual_month=start_datetime_tz.month if event.recurrent == Recurrent.annual else None,
-            tg_id=event.tg_id,
-            max_id=event.max_id,
-            creator_tg_id=creator_tg_id,
-            creator_max_id=creator_max_id,
-            start_at=start_datetime_tz,
-            stop_at=stop_datetime_tz,
-        )
-        async with AsyncSessionLocal() as session:
+            creator_tg_id = event.creator_tg_id if event.creator_tg_id is not None else event.tg_id
+            creator_max_id = event.creator_max_id if event.creator_max_id is not None else event.max_id
+            new_event = DbEvent(
+                description=event.description,
+                emoji=event.emoji,
+                start_time=start_datetime_tz.time(),
+                single_event=True if event.recurrent == Recurrent.never else False,
+                daily=True if event.recurrent == Recurrent.daily else False,
+                weekly=start_datetime_tz.weekday() if event.recurrent == Recurrent.weekly else None,
+                monthly=start_datetime_tz.day if event.recurrent == Recurrent.monthly else None,
+                annual_day=start_datetime_tz.day if event.recurrent == Recurrent.annual else None,
+                annual_month=start_datetime_tz.month if event.recurrent == Recurrent.annual else None,
+                tg_id=event.tg_id,
+                max_id=event.max_id,
+                creator_tg_id=creator_tg_id,
+                creator_max_id=creator_max_id,
+                start_at=start_datetime_tz,
+                stop_at=stop_datetime_tz,
+            )
             session.add(new_event)
             await session.commit()
             await session.refresh(new_event)
