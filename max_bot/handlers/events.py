@@ -978,16 +978,23 @@ async def handle_event_participants_callback(update: MaxUpdate, context: MaxCont
             except ValueError:
                 creator_id = None
 
-        _, event_info = await db_controller.delete_event_by_id(event_id=event_id, tz_name=db_user.time_zone)
+        event_info = ""
+        try:
+            _, event_info = await db_controller.delete_event_by_id(event_id=event_id, tz_name=db_user.time_zone)
+        except Exception:
+            logger.exception("Failed to delete event for participant cancel")
+
         await query.edit_message_text(text="Событие не добавлено в календарь.")
 
         if creator_id and update.effective_chat and creator_id != update.effective_chat.id:
             user_name = update.effective_chat.full_name or update.effective_chat.first_name or "Участник"
-            text = f"Участник {user_name} отказался от участия в событии: {event_info}"
+            text = (
+                f"Участник {user_name} отказался от участия в событии: {event_info}"
+            )
             try:
-                await context.bot.send_message(chat_id=creator_id, text=text)
+                await context.bot.send_message(user_id=creator_id, text=text)
             except Exception:  # noqa: BLE001
-                logger.exception("Failed to notify event creator about отказ")
+                logger.exception("Failed to notify event creator about cancel")
         return
 
 

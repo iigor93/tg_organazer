@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from config import TOKEN, database_url
 from database.db_controller import db_controller
+from max_bot.client import build_max_api
 
 engine = create_async_engine(database_url, echo=False)
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -17,44 +18,85 @@ AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_co
 logger = logging.getLogger(__name__)
 
 
+def _build_reminder_text(event: dict, send_now: bool) -> str:
+    text = "Напоминание о событии"
+    if not send_now:
+        text += "
+Через 1 час:"
+    start_time = event.get("start_time")
+    start_str = start_time.strftime("%H:%M") if start_time else ""
+    description = event.get("description") or ""
+    text += f"
+Время: {start_str}
+Описание: {description}"
+    return text
+
+
 async def send_messages(send_now: bool = False):
     bot = telegram.Bot(token=TOKEN)
-    now = datetime.datetime.now(datetime.timezone.utc)
-    now = now.replace(second=0, microsecond=0)
-    if not send_now:
-        now += datetime.timedelta(hours=1)
-    limit = 400
-    offset = 0
-    while True:
-        async with AsyncSessionLocal() as session:
-            events = await db_controller.get_current_day_events_all_users(event_dt=now, session=session, limit=limit, offset=offset)
+    max_api = await build_max_api()
+    try:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        now = now.replace(second=0, microsecond=0)
+        if not send_now:
+            now += datetime.timedelta(hours=1)
+        limit = 400
+        offset = 0
+        while True:
+            async with AsyncSessionLocal() as session:
+                events_tg = await db_controller.get_current_day_events_all_users(
+                    event_dt=now, session=session, limit=limit, offset=offset
+                )
+                events_max = await db_controller.get_current_day_events_all_users(
+                    event_dt=now, session=session, limit=limit, offset=offset, platform="max"
+                )
 
-        logger.info(f"** len events: {len(events)}")
-        if not events:
+            logger.info(f"** len events tg: {len(events_tg)}")
+            logger.info(f"** len events max: {len(events_max)}")
+            if not events_tg and not events_max:
+                await engine.dispose()
+                break
+
+            for event in events_tg:
+                chat_id = event.get("tg_id")
+                if not chat_id:
+                    continue
+                text = _build_reminder_text(event, send_now)
+
+                event_id = event.get("event_id")
+                reply_markup = None
+                if event_id:
+                    buttons = [
+                        [
+                            InlineKeyboardButton(
+                                "Перенести на 1 час",
+                                callback_data=f"reschedule_event_{event_id}_hour",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "Перенести на завтра",
+                                callback_data=f"reschedule_event_{event_id}_day",
+                            )
+                        ],
+                    ]
+                    reply_markup = InlineKeyboardMarkup(buttons)
+
+                await bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
+                await asyncio.sleep(0.001)
+
+            for event in events_max:
+                user_id = event.get("tg_id")
+                if not user_id:
+                    continue
+                text = _build_reminder_text(event, send_now)
+                await max_api.send_message(text=text, user_id=user_id, include_menu=False)
+                await asyncio.sleep(0.001)
+
             await engine.dispose()
-            break
-
-        for event in events:
-            text = "🔔 Напоминание о начале события"
-            if not send_now:
-                text += "\nЧерез 1 час:"
-            text += f"\n⏰ {event.get('start_time').strftime('%H:%M')}\n📝 {event.get('description')}"
-
-            event_id = event.get("event_id")
-            reply_markup = None
-            if event_id:
-                buttons = [
-                    [InlineKeyboardButton("Перенести на 1 час", callback_data=f"reschedule_event_{event_id}_hour")],
-                    [InlineKeyboardButton("Перенести на завтра", callback_data=f"reschedule_event_{event_id}_day")],
-                ]
-                reply_markup = InlineKeyboardMarkup(buttons)
-
-            await bot.send_message(chat_id=event.get("tg_id"), text=text, reply_markup=reply_markup)
-            await asyncio.sleep(0.001)
-
-        await engine.dispose()
-
-        offset += limit
+            offset += limit
+    finally:
+        await max_api.close()
 
 
 if __name__ == "__main__":
