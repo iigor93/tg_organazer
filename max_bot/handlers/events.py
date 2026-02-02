@@ -536,12 +536,12 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
         prompt_message_id = None
         prompt_chat_id = None
         if query.message:
-            message = await query.message.reply_text(text="Опиши, что будет в событии:")
+            message = await query.message.reply_text(text="Опиши, что будет в событии:", include_menu=False)
             prompt_message_id = message.message_id
             prompt_chat_id = message.chat_id
         elif update.effective_chat:
             message = await context.bot.send_message(
-                chat_id=update.effective_chat.id,
+                user_id=update.effective_chat.id,
                 text="Опиши, что будет в событии:",
                 include_menu=False,
             )
