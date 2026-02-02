@@ -171,6 +171,20 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
         else:
             await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
+        if isinstance(await_event_description, dict):
+            prompt_message_id = await_event_description.get("prompt_message_id")
+            if prompt_message_id:
+                try:
+                    await context.bot.edit_message(message_id=prompt_message_id, text=" ", attachments=[])
+                except Exception:  # noqa: BLE001
+                    logger.exception("Failed to clear description prompt message")
+
+        if update.message and update.message.message_id:
+            try:
+                await context.bot.edit_message(message_id=update.message.message_id, text=" ", attachments=[])
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to clear description input message")
+
         context.chat_data.pop("await_event_description", None)
         return
 
