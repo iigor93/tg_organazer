@@ -668,8 +668,15 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
         if event.participants:
+            creator_name = None
+            if db_user:
+                name_parts = [db_user.first_name, db_user.last_name]
+                creator_name = " ".join([part for part in name_parts if part])
+            if not creator_name:
+                creator_name = update.effective_chat.first_name or update.effective_chat.username or str(update.effective_chat.id)
+            creator_name = str(creator_name).strip().title() if creator_name else str(update.effective_chat.id)
             text = (
-                f"{str(update.effective_chat.first_name).title()} добавил событие"
+                f"{creator_name} добавил событие"
                 f"\n{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year} "
                 f"время {event.start_time.strftime('%H:%M')}"
                 f"{'-' + event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
