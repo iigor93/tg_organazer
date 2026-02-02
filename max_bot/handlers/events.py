@@ -240,7 +240,7 @@ async def handle_time_callback(update: MaxUpdate, context: MaxContext) -> None:
     if data.startswith("time_hour_set_"):
         _, _, _, time_type = data.split("_")
         message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
+            user_id=update.effective_chat.id,
             text="Введите часы (0-23):",
             include_menu=False,
         )
@@ -257,7 +257,7 @@ async def handle_time_callback(update: MaxUpdate, context: MaxContext) -> None:
     if data.startswith("time_minute_set_"):
         _, _, _, time_type = data.split("_")
         message = await context.bot.send_message(
-            chat_id=update.effective_chat.id,
+            user_id=update.effective_chat.id,
             text="Введите минуты (0-59):",
             include_menu=False,
         )
