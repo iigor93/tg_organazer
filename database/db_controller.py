@@ -166,7 +166,55 @@ class DBController:
             if max_user and max_user.tg_id and max_user.tg_id != tg_id:
                 return False, "Этот MAX ID уже связан с другим Telegram ID."
             if tg_user and max_user and tg_user.id != max_user.id:
-                return False, "Найдены две разные записи пользователя. Свяжите вручную."
+                primary = tg_user
+                secondary = max_user
+
+                merged_values: dict = {
+                    "tg_id": tg_id,
+                    "max_id": max_id,
+                }
+                for attr in (
+                    "username",
+                    "first_name",
+                    "last_name",
+                    "time_shift",
+                    "time_zone",
+                    "language_code",
+                    "is_active",
+                    "is_chat",
+                ):
+                    if getattr(primary, attr) is None and getattr(secondary, attr) is not None:
+                        merged_values[attr] = getattr(secondary, attr)
+
+                await session.execute(update(DB_User).where(DB_User.id == primary.id).values(**merged_values))
+
+                await session.execute(
+                    delete(UserRelation).where(
+                        UserRelation.user_id == secondary.id,
+                        UserRelation.related_user_id.in_(
+                            select(UserRelation.related_user_id).where(UserRelation.user_id == primary.id)
+                        ),
+                    )
+                )
+                await session.execute(
+                    delete(UserRelation).where(
+                        UserRelation.related_user_id == secondary.id,
+                        UserRelation.user_id.in_(
+                            select(UserRelation.user_id).where(UserRelation.related_user_id == primary.id)
+                        ),
+                    )
+                )
+                await session.execute(update(UserRelation).where(UserRelation.user_id == secondary.id).values(user_id=primary.id))
+                await session.execute(
+                    update(UserRelation).where(UserRelation.related_user_id == secondary.id).values(related_user_id=primary.id)
+                )
+
+                await session.execute(delete(DB_User).where(DB_User.id == secondary.id))
+                await session.commit()
+
+                tg_user = primary
+                max_user = primary
+
 
             if tg_user:
                 await session.execute(update(DB_User).where(DB_User.tg_id == tg_id).values(max_id=max_id))
