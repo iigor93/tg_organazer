@@ -394,13 +394,13 @@ def get_event_constructor(
     participants_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_participants_{year}_{month}_{day}")
     buttons = [[start_btn, stop_btn], [emoji_btn], [description_btn], [recurrent_btn], [participants_btn]]
 
-    if show_back_btn:
-        callback_data = back_callback_data or "create_event_back_"
-        back_btn = InlineKeyboardButton(text="↩ Вернуться в календарь", callback_data=callback_data)
-        buttons.append([back_btn])
-    elif show_create_btn:
+    if show_create_btn:
         create_btn = InlineKeyboardButton(text="💾 Сохранить событие", callback_data="create_event_save_to_db")
         buttons.append([create_btn])
+    if show_back_btn:
+        callback_data = back_callback_data or "create_event_back_"
+        back_btn = InlineKeyboardButton(text="\u21a9\u041d\u0430\u0437\u0430\u0434", callback_data=callback_data)
+        buttons.append([back_btn])
 
     reply_markup = InlineKeyboardMarkup(buttons)
 
@@ -445,6 +445,8 @@ async def start_event_creation(
         day=day,
         has_participants=has_participants,
         show_details=bool(context.chat_data.get("edit_event_id")),
+        show_back_btn=True,
+        back_callback_data=f"create_event_back_{year}_{month}_{day}",
     )
     await update.callback_query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
