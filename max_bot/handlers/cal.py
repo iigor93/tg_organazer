@@ -216,7 +216,10 @@ async def handle_calendar_callback(update: MaxUpdate, context: MaxContext) -> No
 
         # Генерируем новый календарь
         reply_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        await query.edit_message_text("📅 Выберите дату события:", reply_markup=reply_markup)
+        keyboard = list(reply_markup.inline_keyboard)
+        keyboard.append([InlineKeyboardButton("\u041c\u0435\u043d\u044e", callback_data="menu_open")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("Выберите дату события:", reply_markup=reply_markup)
 
     elif data.startswith("cal_week_nav_"):
         parts = data.split("_")
@@ -231,7 +234,10 @@ async def handle_calendar_callback(update: MaxUpdate, context: MaxContext) -> No
             user_id=user.id,
             tz_name=db_user.time_zone,
         )
-        await query.edit_message_text("📅 Выберите дату события:", reply_markup=reply_markup)
+        keyboard = list(reply_markup.inline_keyboard)
+        keyboard.append([InlineKeyboardButton("\u041c\u0435\u043d\u044e", callback_data="menu_open")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("Выберите дату события:", reply_markup=reply_markup)
 
     elif data.startswith("cal_month_"):
         _, _, year_str, month_str = data.split("_")
@@ -239,7 +245,10 @@ async def handle_calendar_callback(update: MaxUpdate, context: MaxContext) -> No
         month = int(month_str)
 
         reply_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        await query.edit_message_text("📅 Выберите дату события:", reply_markup=reply_markup)
+        keyboard = list(reply_markup.inline_keyboard)
+        keyboard.append([InlineKeyboardButton("\u041c\u0435\u043d\u044e", callback_data="menu_open")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text("Выберите дату события:", reply_markup=reply_markup)
 
     elif data.startswith("cal_select_"):
         logger.info("Выбор события cal_select_")

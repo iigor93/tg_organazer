@@ -120,7 +120,6 @@ async def handle_location(update: MaxUpdate, context: MaxContext) -> None:
         logger.exception("OFFSET ERR: " )
         pass
 
-    await show_main_menu_keyboard(update.message)
     await show_calendar(update, context)
 
 
@@ -130,7 +129,6 @@ async def handle_skip(update: MaxUpdate, context: MaxContext) -> None:
     user = update.effective_user
     logger.info(f"Пользователь {user.id} ({user.first_name}) пропустил геолокацию")
 
-    await show_main_menu_keyboard(update.message)
     await show_calendar(update, context)
 
 
