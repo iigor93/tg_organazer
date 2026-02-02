@@ -751,7 +751,11 @@ async def show_upcoming_events(update: MaxUpdate, context: MaxContext) -> None:
     else:
         text = "Ближайшие события не найдены"
 
-    await update.message.reply_text(text, parse_mode="HTML")
+    message = update.message or (update.callback_query.message if update.callback_query else None)
+    if message:
+        await message.reply_text(text, parse_mode="HTML")
+    else:
+        await context.bot.send_message(text=text, user_id=user.id, fmt="html")
 
 
 async def handle_delete_event_callback(update: MaxUpdate, context: MaxContext) -> None:

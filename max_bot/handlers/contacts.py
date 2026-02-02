@@ -35,19 +35,27 @@ async def handle_team_command(update: MaxUpdate, context: MaxContext) -> None:
     user_id = update.effective_chat.id
 
     participants = await db_controller.get_participants(tg_id=user_id, include_inactive=True, platform="max")
+    message = update.message or (update.callback_query.message if update.callback_query else None)
     if not participants:
-        await update.message.reply_text("У вас нет привязанных участников.")
+        text = "У вас нет участников."
+        if message:
+            await message.reply_text(text)
+        else:
+            await context.bot.send_message(text=text, user_id=user_id)
         return
 
     context.chat_data["team_participants"] = participants
     context.chat_data["team_selected"] = []
 
     reply_markup = _build_team_keyboard(participants, set())
-    await update.message.reply_text(
-        "Список привязанных участников. Выберите лишних и нажмите удалить.",
-        reply_markup=reply_markup,
+    text = (
+        "Список участников. "
+        "Выберите лишних и нажмите Удалить."
     )
-
+    if message:
+        await message.reply_text(text, reply_markup=reply_markup)
+    else:
+        await context.bot.send_message(text=text, user_id=user_id, attachments=reply_markup.to_attachments())
 
 async def handle_team_callback(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("handle_team_callback")
@@ -85,7 +93,11 @@ async def handle_team_callback(update: MaxUpdate, context: MaxContext) -> None:
             )
             return
 
-        deleted = await db_controller.delete_participants(current_tg_id=user_id, related_tg_ids=list(selected), platform="max")
+        deleted = await db_controller.delete_participants(
+            current_tg_id=user_id,
+            related_tg_ids=list(selected),
+            platform="max",
+        )
         participants = await db_controller.get_participants(tg_id=user_id, include_inactive=True, platform="max") or {}
         context.chat_data["team_participants"] = participants
         context.chat_data["team_selected"] = []
@@ -96,7 +108,7 @@ async def handle_team_callback(update: MaxUpdate, context: MaxContext) -> None:
 
         reply_markup = _build_team_keyboard(participants, set())
         await query.edit_message_text(
-            f"Удалено: {deleted}. Выберите следующих участников.",
+            f"Удалено: {deleted}. Выберите новых участников.",
             reply_markup=reply_markup,
         )
         return
@@ -106,7 +118,6 @@ async def handle_team_callback(update: MaxUpdate, context: MaxContext) -> None:
         context.chat_data.pop("team_selected", None)
         await query.edit_message_text("Управление участниками закрыто.")
         return
-
 
 async def handle_contact(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("handle_contact")
@@ -168,6 +179,7 @@ async def handle_contact(update: MaxUpdate, context: MaxContext) -> None:
         event = context.chat_data.get("event")
         if event:
             participants = await db_controller.get_participants(
+    message = update.message or (update.callback_query.message if update.callback_query else None)
                 tg_id=update.effective_chat.id, include_inactive=True, platform="max"
             ) or {}
             event.all_user_participants = participants
