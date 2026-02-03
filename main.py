@@ -208,6 +208,16 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await update.message.reply_text("Используйте кнопки для навигации.")
 
 
+async def handle_my_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id if update.effective_user else None
+    if user_id is None and update.message:
+        user_id = update.message.chat_id
+    if user_id is None:
+        await update.message.reply_text("Не удалось определить ваш ID.")
+        return
+    await update.message.reply_text(f"Ваш Telegram ID: {user_id}")
+
+
 async def all_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("ALL callbacks")
     logger.info(f"*** {update}")
@@ -219,6 +229,7 @@ async def set_commands(app):
     await app.bot.set_my_commands(
         [
             BotCommand("start", "Запустить бота"),
+            BotCommand("my_id", "Показать мой Telegram ID"),
             BotCommand("team", "Управление участниками"),
             BotCommand("help", "Help"),
         ]
@@ -242,6 +253,7 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", handle_help))
     application.add_handler(CommandHandler("team", handle_team_command))
+    application.add_handler(CommandHandler("my_id", handle_my_id))
     application.add_handler(MessageHandler(filters.LOCATION, handle_location))
     application.add_handler(MessageHandler(filters.Regex("^⏭ Пропустить$"), handle_skip))
 
