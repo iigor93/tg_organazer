@@ -54,6 +54,8 @@ MENU_BACK_TEXT = "\u21a9\u041d\u0430\u0437\u0430\u0434"
 MAX_WEBHOOK_UPDATE_TYPES = ["message_created", "message_edited", "message_callback", "bot_started"]
 _WEBHOOK_LOOP: asyncio.AbstractEventLoop | None = None
 _WEBHOOK_THREAD: threading.Thread | None = None
+_WEBHOOK_QUEUE: asyncio.Queue | None = None
+_WEBHOOK_WORKER_TASK: asyncio.Task | None = None
 
 
 def build_menu_markup() -> InlineKeyboardMarkup:
@@ -382,6 +384,42 @@ def _run_webhook_loop(loop: asyncio.AbstractEventLoop) -> None:
     loop.run_forever()
 
 
+async def _webhook_worker() -> None:
+    while True:
+        payload = await _WEBHOOK_QUEUE.get()  # type: ignore[union-attr]
+        if payload is None:
+            _WEBHOOK_QUEUE.task_done()  # type: ignore[union-attr]
+            break
+        try:
+            await _handle_webhook_payload(payload)
+        except Exception:  # noqa: BLE001
+            logger.exception("Failed to process webhook payload")
+        finally:
+            _WEBHOOK_QUEUE.task_done()  # type: ignore[union-attr]
+
+
+async def _start_webhook_worker() -> None:
+    global _WEBHOOK_QUEUE, _WEBHOOK_WORKER_TASK
+    if _WEBHOOK_QUEUE is None:
+        _WEBHOOK_QUEUE = asyncio.Queue()
+    if _WEBHOOK_WORKER_TASK is None or _WEBHOOK_WORKER_TASK.done():
+        _WEBHOOK_WORKER_TASK = asyncio.create_task(_webhook_worker())
+
+
+async def _stop_webhook_worker() -> None:
+    if _WEBHOOK_QUEUE is not None:
+        await _WEBHOOK_QUEUE.put(None)
+        await _WEBHOOK_QUEUE.join()
+    if _WEBHOOK_WORKER_TASK is not None:
+        await _WEBHOOK_WORKER_TASK
+
+
+async def _enqueue_webhook_payload(payload: object) -> None:
+    if _WEBHOOK_QUEUE is None:
+        await _start_webhook_worker()
+    await _WEBHOOK_QUEUE.put(payload)  # type: ignore[union-attr]
+
+
 def _start_webhook_loop() -> None:
     global _WEBHOOK_LOOP, _WEBHOOK_THREAD
     if _WEBHOOK_LOOP and _WEBHOOK_LOOP.is_running():
@@ -391,6 +429,7 @@ def _start_webhook_loop() -> None:
     thread.start()
     _WEBHOOK_LOOP = loop
     _WEBHOOK_THREAD = thread
+    asyncio.run_coroutine_threadsafe(_start_webhook_worker(), loop).result(timeout=5)
 
 
 def _stop_webhook_loop() -> None:
@@ -399,6 +438,10 @@ def _stop_webhook_loop() -> None:
     thread = _WEBHOOK_THREAD
     if not loop or not thread:
         return
+    try:
+        asyncio.run_coroutine_threadsafe(_stop_webhook_worker(), loop).result(timeout=5)
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to stop webhook worker")
     if loop.is_running():
         loop.call_soon_threadsafe(loop.stop)
     thread.join(timeout=5)
@@ -501,8 +544,8 @@ class MaxWebhookHandler(BaseHTTPRequestHandler):
             if _WEBHOOK_LOOP is None or not _WEBHOOK_LOOP.is_running():
                 self._send_text(503, "Webhook loop not running")
                 return
-            future = asyncio.run_coroutine_threadsafe(_handle_webhook_payload(payload), _WEBHOOK_LOOP)
-            future.result(timeout=30)
+            future = asyncio.run_coroutine_threadsafe(_enqueue_webhook_payload(payload), _WEBHOOK_LOOP)
+            future.result(timeout=2)
         except Exception:  # noqa: BLE001
             logger.exception("Failed to process webhook payload")
             self._send_text(500, "Internal error")
