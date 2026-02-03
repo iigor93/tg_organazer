@@ -144,6 +144,10 @@ class MaxApi:
 
         return await self.request("PUT", "/messages", params=params, payload=payload)
 
+    async def delete_message(self, message_id: str | int) -> dict:
+        params = {"message_id": message_id}
+        return await self.request("DELETE", "/messages", params=params)
+
 
 async def build_max_api() -> MaxApi:
     await asyncio.sleep(0)

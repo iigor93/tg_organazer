@@ -168,6 +168,11 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
             event.stop_time = selected_time
 
         context.chat_data["event"] = event
+        prompt_message_id = None
+        if isinstance(await_time_input, dict):
+            prompt_message_id = await_time_input.get("prompt_message_id")
+        if not prompt_message_id:
+            prompt_message_id = context.chat_data.get("time_input_prompt_message_id")
         context.chat_data.pop("await_time_input", None)
         context.chat_data.pop("time_input_prompt_message_id", None)
         context.chat_data.pop("time_input_prompt_chat_id", None)
@@ -178,6 +183,18 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
             await context.bot.edit_message(message_id=message_id, attachments=reply_markup.to_attachments())
         else:
             await update.message.reply_text("Updated.", reply_markup=reply_markup)
+
+        if update.message:
+            try:
+                await context.bot.delete_message(message_id=update.message.message_id)
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to delete time input message")
+
+        if prompt_message_id:
+            try:
+                await context.bot.delete_message(message_id=prompt_message_id)
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed to delete time input prompt message")
         return
 
     await_event_description = context.chat_data.get("await_event_description")
@@ -218,15 +235,15 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
             prompt_message_id = await_event_description.get("prompt_message_id")
             if prompt_message_id:
                 try:
-                    await context.bot.edit_message(message_id=prompt_message_id, text=" ", attachments=[])
+                    await context.bot.delete_message(message_id=prompt_message_id)
                 except Exception:  # noqa: BLE001
-                    logger.exception("Failed to clear description prompt message")
+                    logger.exception("Failed to delete description prompt message")
 
-        if update.message and update.message.sender and update.message.sender.is_bot:
+        if update.message:
             try:
-                await context.bot.edit_message(message_id=update.message.message_id, text=" ", attachments=[])
+                await context.bot.delete_message(message_id=update.message.message_id)
             except Exception:  # noqa: BLE001
-                logger.exception("Failed to clear description input message")
+                logger.exception("Failed to delete description input message")
 
         context.chat_data.pop("await_event_description", None)
         return
