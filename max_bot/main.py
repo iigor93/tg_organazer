@@ -3,10 +3,16 @@ import datetime
 import json
 import logging
 import threading
+import os
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
 from dotenv import load_dotenv
+
+if __package__ in {None, ""}:
+    # Allow running this file directly without installing the package.
+    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from config import MAX_POLL_TIMEOUT, MAX_WEBHOOK_PORT, TOKEN, WEBHOOK_MAX_SECRET, WEBHOOK_MAX_URL
 from max_bot.client import build_max_api
