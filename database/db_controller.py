@@ -404,6 +404,13 @@ class DBController:
                         event.tg_id = user.tg_id
                     if event.creator_tg_id is None:
                         event.creator_tg_id = user.tg_id
+            if event.tg_id and (event.max_id is None or event.creator_max_id is None):
+                user = (await session.execute(select(DB_User).where(DB_User.tg_id == event.tg_id))).scalar_one_or_none()
+                if user and user.max_id:
+                    if event.max_id is None:
+                        event.max_id = user.max_id
+                    if event.creator_max_id is None:
+                        event.creator_max_id = user.max_id
 
             creator_tg_id = event.creator_tg_id if event.creator_tg_id is not None else event.tg_id
             creator_max_id = event.creator_max_id if event.creator_max_id is not None else event.max_id
@@ -437,6 +444,19 @@ class DBController:
                         .values(
                             tg_id=new_event.tg_id or user.tg_id,
                             creator_tg_id=new_event.creator_tg_id or user.tg_id,
+                        )
+                    )
+                    await session.commit()
+                    await session.refresh(new_event)
+            if new_event.tg_id and (new_event.max_id is None or new_event.creator_max_id is None):
+                user = (await session.execute(select(DB_User).where(DB_User.tg_id == new_event.tg_id))).scalar_one_or_none()
+                if user and user.max_id:
+                    await session.execute(
+                        update(DbEvent)
+                        .where(DbEvent.id == new_event.id)
+                        .values(
+                            max_id=new_event.max_id or user.max_id,
+                            creator_max_id=new_event.creator_max_id or user.max_id,
                         )
                     )
                     await session.commit()
