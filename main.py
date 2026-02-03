@@ -215,7 +215,7 @@ async def handle_my_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if user_id is None:
         await update.message.reply_text("Не удалось определить ваш ID.")
         return
-    await update.message.reply_text(f"Ваш Telegram ID: {user_id}")
+    await update.message.reply_text(f"{user_id}")
 
 
 async def all_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
