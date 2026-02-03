@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import json
 import logging
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
@@ -51,6 +52,8 @@ MENU_HELP_TEXT = "\u041f\u043e\u043c\u043e\u0449\u044c"
 MENU_LINK_TG_TEXT = "\u0421\u0432\u044f\u0437\u0430\u0442\u044c \u0441 Telegram"
 MENU_BACK_TEXT = "\u21a9\u041d\u0430\u0437\u0430\u0434"
 MAX_WEBHOOK_UPDATE_TYPES = ["message_created", "message_edited", "message_callback", "bot_started"]
+_WEBHOOK_LOOP: asyncio.AbstractEventLoop | None = None
+_WEBHOOK_THREAD: threading.Thread | None = None
 
 
 def build_menu_markup() -> InlineKeyboardMarkup:
@@ -374,6 +377,36 @@ def _extract_webhook_updates(payload: object) -> list[dict]:
     return []
 
 
+def _run_webhook_loop(loop: asyncio.AbstractEventLoop) -> None:
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+
+def _start_webhook_loop() -> None:
+    global _WEBHOOK_LOOP, _WEBHOOK_THREAD
+    if _WEBHOOK_LOOP and _WEBHOOK_LOOP.is_running():
+        return
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=_run_webhook_loop, args=(loop,), daemon=True)
+    thread.start()
+    _WEBHOOK_LOOP = loop
+    _WEBHOOK_THREAD = thread
+
+
+def _stop_webhook_loop() -> None:
+    global _WEBHOOK_LOOP, _WEBHOOK_THREAD
+    loop = _WEBHOOK_LOOP
+    thread = _WEBHOOK_THREAD
+    if not loop or not thread:
+        return
+    if loop.is_running():
+        loop.call_soon_threadsafe(loop.stop)
+    thread.join(timeout=5)
+    loop.close()
+    _WEBHOOK_LOOP = None
+    _WEBHOOK_THREAD = None
+
+
 async def _process_raw_update(raw_update: dict, api: "MaxApi") -> None:
     parsed = parse_update(raw_update, api)
     if not parsed:
@@ -465,7 +498,11 @@ class MaxWebhookHandler(BaseHTTPRequestHandler):
             self._send_text(400, "Invalid JSON")
             return
         try:
-            asyncio.run(_handle_webhook_payload(payload))
+            if _WEBHOOK_LOOP is None or not _WEBHOOK_LOOP.is_running():
+                self._send_text(503, "Webhook loop not running")
+                return
+            future = asyncio.run_coroutine_threadsafe(_handle_webhook_payload(payload), _WEBHOOK_LOOP)
+            future.result(timeout=30)
         except Exception:  # noqa: BLE001
             logger.exception("Failed to process webhook payload")
             self._send_text(500, "Internal error")
@@ -475,6 +512,7 @@ class MaxWebhookHandler(BaseHTTPRequestHandler):
 
 def run_webhook() -> None:
     asyncio.run(_ensure_webhook_subscription())
+    _start_webhook_loop()
     server = ThreadingHTTPServer(("0.0.0.0", MAX_WEBHOOK_PORT), MaxWebhookHandler)
     server.daemon_threads = True
     logger.info("MAX bot webhook listen=0.0.0.0:%s url=%s", MAX_WEBHOOK_PORT, WEBHOOK_MAX_URL)
@@ -482,6 +520,7 @@ def run_webhook() -> None:
         server.serve_forever()
     finally:
         asyncio.run(_drop_webhook_subscription())
+        _stop_webhook_loop()
         server.server_close()
 
 
