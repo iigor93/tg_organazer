@@ -3,7 +3,6 @@ import datetime
 import json
 import logging
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
 
 import httpx
 from dotenv import load_dotenv
@@ -51,6 +50,7 @@ MENU_MY_ID_TEXT = "\u041c\u043e\u0439 ID"
 MENU_HELP_TEXT = "\u041f\u043e\u043c\u043e\u0449\u044c"
 MENU_LINK_TG_TEXT = "\u0421\u0432\u044f\u0437\u0430\u0442\u044c \u0441 Telegram"
 MENU_BACK_TEXT = "\u21a9\u041d\u0430\u0437\u0430\u0434"
+MAX_WEBHOOK_UPDATE_TYPES = ["message_created", "message_edited", "message_callback", "bot_started"]
 
 
 def build_menu_markup() -> InlineKeyboardMarkup:
@@ -397,6 +397,36 @@ async def _handle_webhook_payload(payload: object) -> None:
         await api.close()
 
 
+async def _ensure_webhook_subscription() -> None:
+    if not WEBHOOK_MAX_URL:
+        raise RuntimeError("WEBHOOK_MAX_URL is not set")
+    api = await build_max_api()
+    try:
+        response = await api.create_subscription(
+            url=WEBHOOK_MAX_URL,
+            update_types=MAX_WEBHOOK_UPDATE_TYPES,
+            secret=WEBHOOK_MAX_SECRET,
+        )
+        if isinstance(response, dict) and response.get("success") is False:
+            message = response.get("message") or "Unknown error"
+            raise RuntimeError(f"MAX webhook subscription failed: {message}")
+    finally:
+        await api.close()
+
+
+async def _drop_webhook_subscription() -> None:
+    if not WEBHOOK_MAX_URL:
+        return
+    api = await build_max_api()
+    try:
+        response = await api.delete_subscription(url=WEBHOOK_MAX_URL)
+        if isinstance(response, dict) and response.get("success") is False:
+            message = response.get("message") or "Unknown error"
+            logger.warning("MAX webhook unsubscribe failed: %s", message)
+    finally:
+        await api.close()
+
+
 class MaxWebhookHandler(BaseHTTPRequestHandler):
     server_version = "MaxWebhook/1.0"
 
@@ -406,22 +436,8 @@ class MaxWebhookHandler(BaseHTTPRequestHandler):
     def _is_authorized(self) -> bool:
         if not WEBHOOK_MAX_SECRET:
             return True
-        token = (
-            self.headers.get("X-Webhook-Secret")
-            or self.headers.get("X-Webhook-Secret-Token")
-            or self.headers.get("X-Secret-Token")
-        )
-        if token and token == WEBHOOK_MAX_SECRET:
-            return True
-        query = urlparse(self.path).query
-        if not query:
-            return False
-        params = parse_qs(query)
-        for key in ("secret", "token", "secret_token"):
-            value = params.get(key)
-            if value and value[0] == WEBHOOK_MAX_SECRET:
-                return True
-        return False
+        token = self.headers.get("X-Max-Bot-Api-Secret")
+        return bool(token and token == WEBHOOK_MAX_SECRET)
 
     def _send_text(self, status: int, body: str) -> None:
         payload = body.encode("utf-8")
@@ -458,12 +474,14 @@ class MaxWebhookHandler(BaseHTTPRequestHandler):
 
 
 def run_webhook() -> None:
+    asyncio.run(_ensure_webhook_subscription())
     server = ThreadingHTTPServer(("0.0.0.0", MAX_WEBHOOK_PORT), MaxWebhookHandler)
     server.daemon_threads = True
     logger.info("MAX bot webhook listen=0.0.0.0:%s url=%s", MAX_WEBHOOK_PORT, WEBHOOK_MAX_URL)
     try:
         server.serve_forever()
     finally:
+        asyncio.run(_drop_webhook_subscription())
         server.server_close()
 
 
@@ -476,7 +494,7 @@ async def poll_updates() -> None:
                 response = await api.get_updates(
                     marker=marker,
                     timeout=MAX_POLL_TIMEOUT,
-                    types=["message_created", "message_edited", "message_callback", "bot_started"],
+                    types=MAX_WEBHOOK_UPDATE_TYPES,
                 )
             except Exception:  # noqa: BLE001
                 logger.exception("MAX poll error")

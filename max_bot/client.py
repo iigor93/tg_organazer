@@ -54,6 +54,23 @@ class MaxApi:
             params["types"] = ",".join(types)
         return await self.request("GET", "/updates", params=params)
 
+    async def create_subscription(
+        self,
+        url: str,
+        update_types: list[str] | None = None,
+        secret: str | None = None,
+    ) -> dict:
+        payload: dict[str, Any] = {"url": url}
+        if update_types:
+            payload["update_types"] = update_types
+        if secret:
+            payload["secret"] = secret
+        return await self.request("POST", "/subscriptions", payload=payload)
+
+    async def delete_subscription(self, url: str) -> dict:
+        params = {"url": url}
+        return await self.request("DELETE", "/subscriptions", params=params)
+
     async def send_message(
         self,
         text: str,
