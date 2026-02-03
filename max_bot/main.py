@@ -1,11 +1,14 @@
 import asyncio
 import datetime
+import json
 import logging
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 from dotenv import load_dotenv
 
-from config import MAX_POLL_TIMEOUT, TOKEN
+from config import MAX_POLL_TIMEOUT, MAX_WEBHOOK_PORT, TOKEN, WEBHOOK_MAX_SECRET, WEBHOOK_MAX_URL
 from max_bot.client import build_max_api
 from max_bot.compat import InlineKeyboardButton, InlineKeyboardMarkup
 from max_bot.context import MaxContext, MaxUpdate
@@ -359,6 +362,110 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
         await handle_text(update, context)
 
 
+def _extract_webhook_updates(payload: object) -> list[dict]:
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict):
+        for key in ("updates", "items", "result"):
+            items = payload.get(key)
+            if isinstance(items, list):
+                return [item for item in items if isinstance(item, dict)]
+        return [payload]
+    return []
+
+
+async def _process_raw_update(raw_update: dict, api: "MaxApi") -> None:
+    parsed = parse_update(raw_update, api)
+    if not parsed:
+        return
+    chat = parsed.effective_chat
+    if not chat:
+        return
+    context = MaxContext(bot=api, chat_data=chat_state.get(chat.id))
+    try:
+        await dispatch_update(parsed, context)
+    except Exception:  # noqa: BLE001
+        logger.exception("Failed to handle update: %s", raw_update)
+
+
+async def _handle_webhook_payload(payload: object) -> None:
+    api = await build_max_api()
+    try:
+        for raw_update in _extract_webhook_updates(payload):
+            await _process_raw_update(raw_update, api)
+    finally:
+        await api.close()
+
+
+class MaxWebhookHandler(BaseHTTPRequestHandler):
+    server_version = "MaxWebhook/1.0"
+
+    def log_message(self, fmt: str, *args: object) -> None:
+        logger.info("MAX webhook: %s", fmt % args)
+
+    def _is_authorized(self) -> bool:
+        if not WEBHOOK_MAX_SECRET:
+            return True
+        token = (
+            self.headers.get("X-Webhook-Secret")
+            or self.headers.get("X-Webhook-Secret-Token")
+            or self.headers.get("X-Secret-Token")
+        )
+        if token and token == WEBHOOK_MAX_SECRET:
+            return True
+        query = urlparse(self.path).query
+        if not query:
+            return False
+        params = parse_qs(query)
+        for key in ("secret", "token", "secret_token"):
+            value = params.get(key)
+            if value and value[0] == WEBHOOK_MAX_SECRET:
+                return True
+        return False
+
+    def _send_text(self, status: int, body: str) -> None:
+        payload = body.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def do_GET(self) -> None:  # noqa: N802
+        self._send_text(200, "OK")
+
+    def do_POST(self) -> None:  # noqa: N802
+        if not self._is_authorized():
+            self._send_text(403, "Forbidden")
+            return
+        length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length) if length > 0 else b""
+        if not body:
+            self._send_text(400, "Empty payload")
+            return
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            self._send_text(400, "Invalid JSON")
+            return
+        try:
+            asyncio.run(_handle_webhook_payload(payload))
+        except Exception:  # noqa: BLE001
+            logger.exception("Failed to process webhook payload")
+            self._send_text(500, "Internal error")
+            return
+        self._send_text(200, "OK")
+
+
+def run_webhook() -> None:
+    server = ThreadingHTTPServer(("0.0.0.0", MAX_WEBHOOK_PORT), MaxWebhookHandler)
+    server.daemon_threads = True
+    logger.info("MAX bot webhook listen=0.0.0.0:%s url=%s", MAX_WEBHOOK_PORT, WEBHOOK_MAX_URL)
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()
+
 
 async def poll_updates() -> None:
     api = await build_max_api()
@@ -384,23 +491,18 @@ async def poll_updates() -> None:
                 marker = response.get("marker") or response.get("next_marker") or marker
 
             for raw_update in updates:
-                parsed = parse_update(raw_update, api)
-                if not parsed:
-                    continue
-                chat = parsed.effective_chat
-                if not chat:
-                    continue
-                context = MaxContext(bot=api, chat_data=chat_state.get(chat.id))
-                try:
-                    await dispatch_update(parsed, context)
-                except Exception:  # noqa: BLE001
-                    logger.exception("Failed to handle update: %s", raw_update)
+                await _process_raw_update(raw_update, api)
     finally:
         await api.close()
 
 
 def main() -> None:
-    asyncio.run(poll_updates())
+    if WEBHOOK_MAX_URL:
+        logger.info("Через webhook %s", WEBHOOK_MAX_URL)
+        run_webhook()
+    else:
+        logger.info("Через Long polling")
+        asyncio.run(poll_updates())
 
 
 if __name__ == "__main__":
