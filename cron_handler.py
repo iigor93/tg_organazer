@@ -4,8 +4,8 @@ import datetime
 import logging
 
 import telegram
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import TOKEN, database_url
 from database.db_controller import db_controller
@@ -21,14 +21,11 @@ logger = logging.getLogger(__name__)
 def _build_reminder_text(event: dict, send_now: bool) -> str:
     text = "Напоминание о событии"
     if not send_now:
-        text += "
-Через 1 час:"
+        text += "Через 1 час:"
     start_time = event.get("start_time")
     start_str = start_time.strftime("%H:%M") if start_time else ""
     description = event.get("description") or ""
-    text += f"
-Время: {start_str}
-Описание: {description}"
+    text += f"Время: {start_str}" f"Описание: {description}"
     return text
 
 
@@ -44,9 +41,7 @@ async def send_messages(send_now: bool = False):
         offset = 0
         while True:
             async with AsyncSessionLocal() as session:
-                events_tg = await db_controller.get_current_day_events_all_users(
-                    event_dt=now, session=session, limit=limit, offset=offset
-                )
+                events_tg = await db_controller.get_current_day_events_all_users(event_dt=now, session=session, limit=limit, offset=offset)
                 events_max = await db_controller.get_current_day_events_all_users(
                     event_dt=now, session=session, limit=limit, offset=offset, platform="max"
                 )
