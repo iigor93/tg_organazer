@@ -23,11 +23,11 @@ logger = logging.getLogger(__name__)
 def _build_reminder_text(event: dict, send_now: bool) -> str:
     text = "Напоминание о событии"
     if not send_now:
-        text += "Через 1 час:"
+        text += "\nЧерез 1 час:"
     start_time = event.get("start_time")
     start_str = start_time.strftime("%H:%M") if start_time else ""
     description = event.get("description") or ""
-    text += f"Время: {start_str}" f"Описание: {description}"
+    text += f"\nВремя: {start_str}\nОписание: {description}"
     return text
 
 
