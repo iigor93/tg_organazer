@@ -10,6 +10,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from config import TOKEN, database_url
 from database.db_controller import db_controller
 from max_bot.client import build_max_api
+from max_bot.compat import InlineKeyboardButton as MaxInlineKeyboardButton
+from max_bot.compat import InlineKeyboardMarkup as MaxInlineKeyboardMarkup
 
 engine = create_async_engine(database_url, echo=False)
 AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -85,7 +87,26 @@ async def send_messages(send_now: bool = False):
                 if not user_id:
                     continue
                 text = _build_reminder_text(event, send_now)
-                await max_api.send_message(text=text, user_id=user_id, include_menu=False)
+                event_id = event.get("event_id")
+                attachments = None
+                if event_id:
+                    buttons = [
+                        [
+                            MaxInlineKeyboardButton(
+                                "\u041f\u0435\u0440\u0435\u043d\u0435\u0441\u0442\u0438 \u043d\u0430 1 \u0447\u0430\u0441",
+                                callback_data=f"reschedule_event_{event_id}_hour",
+                            )
+                        ],
+                        [
+                            MaxInlineKeyboardButton(
+                                "\u041f\u0435\u0440\u0435\u043d\u0435\u0441\u0442\u0438 \u043d\u0430 \u0437\u0430\u0432\u0442\u0440\u0430",
+                                callback_data=f"reschedule_event_{event_id}_day",
+                            )
+                        ],
+                    ]
+                    reply_markup = MaxInlineKeyboardMarkup(buttons)
+                    attachments = reply_markup.to_attachments()
+                await max_api.send_message(text=text, user_id=user_id, attachments=attachments, include_menu=False)
                 await asyncio.sleep(0.001)
 
             await engine.dispose()
