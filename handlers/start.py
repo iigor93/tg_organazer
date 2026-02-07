@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from telegram import KeyboardButton, Message, ReplyKeyboardMarkup, Update
+from telegram import BotCommand, BotCommandScopeChat, KeyboardButton, Message, ReplyKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 from timezonefinder import TimezoneFinder
 
@@ -12,6 +12,33 @@ from handlers.cal import show_calendar
 from i18n import normalize_locale, resolve_user_locale, tr
 
 logger = logging.getLogger(__name__)
+
+
+def _commands_for_locale(locale: str) -> list[BotCommand]:
+    if locale == "en":
+        return [
+            BotCommand("start", "Start bot"),
+            BotCommand("my_id", "Show my Telegram ID"),
+            BotCommand("team", "Manage participants"),
+            BotCommand("help", "Help"),
+            BotCommand("language", "Change language"),
+        ]
+    return [
+        BotCommand("start", "Запустить бота"),
+        BotCommand("my_id", "Показать мой Telegram ID"),
+        BotCommand("team", "Управление участниками"),
+        BotCommand("help", "Помощь"),
+        BotCommand("language", "Сменить язык"),
+    ]
+
+
+async def _set_chat_commands(context: ContextTypes.DEFAULT_TYPE, chat_id: int, locale: str) -> None:
+    if not getattr(context, "bot", None):
+        return
+    await context.bot.set_my_commands(
+        _commands_for_locale(locale),
+        scope=BotCommandScopeChat(chat_id=chat_id),
+    )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -28,11 +55,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     user = update.effective_chat
     tg_user = TgUser.model_validate(user)
-    if update.effective_user and not tg_user.language_code:
-        tg_user.language_code = getattr(update.effective_user, "language_code", None)
     db_user = await db_controller.save_update_user(tg_user=tg_user)
-    locale = normalize_locale(tg_user.language_code)
-    await db_controller.set_user_language(user_id=user.id, language_code=locale, platform="tg")
+    db_locale_raw = getattr(db_user, "language_code", None)
+    db_locale = normalize_locale(db_locale_raw, default="") if db_locale_raw else ""
+    locale = db_locale
+    if not locale:
+        locale = normalize_locale(getattr(update.effective_user, "language_code", None))
+        await db_controller.set_user_language(user_id=user.id, language_code=locale, platform="tg")
+    await _set_chat_commands(context, user.id, locale)
 
     logger.info(f"*** DB user: {db_user}")
 
@@ -166,6 +196,7 @@ async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     await db_controller.set_user_language(user_id=update.effective_chat.id, language_code=selected, platform="tg")
     context.chat_data["locale"] = selected
+    await _set_chat_commands(context, update.effective_chat.id, selected)
     if selected == "ru":
         await update.message.reply_text(tr("Язык переключен на русский.", selected))
     else:
