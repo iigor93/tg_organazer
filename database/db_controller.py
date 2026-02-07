@@ -57,6 +57,8 @@ class DBController:
                 session.add(user)
             else:
                 tg_user_dict = tg_user.model_dump(exclude={"title"}, exclude_defaults=True, exclude_unset=True)
+                if tg_user_dict.get("language_code") is None:
+                    tg_user_dict.pop("language_code", None)
                 if from_contact:
                     tg_user_dict.pop("is_active", None)
                 else:
@@ -100,6 +102,8 @@ class DBController:
                 session.add(user)
             else:
                 max_user_dict = max_user.model_dump(exclude={"title"}, exclude_defaults=True, exclude_unset=True)
+                if max_user_dict.get("language_code") is None:
+                    max_user_dict.pop("language_code", None)
                 if from_contact:
                     max_user_dict.pop("is_active", None)
                 else:
