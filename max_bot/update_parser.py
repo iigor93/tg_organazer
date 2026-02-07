@@ -13,8 +13,9 @@ def _parse_user(data: dict | None) -> MaxChat:
     user_id = data.get("id") or data.get("user_id") or 0
     first_name = data.get("name") or data.get("first_name")
     last_name = data.get("last_name")
+    language_code = data.get("language_code") or data.get("locale")
     is_bot = data.get("is_bot")
-    return MaxChat(id=int(user_id), first_name=first_name, last_name=last_name, is_bot=is_bot)
+    return MaxChat(id=int(user_id), first_name=first_name, last_name=last_name, language_code=language_code, is_bot=is_bot)
 
 
 def _parse_message(data: dict | None, api: MaxApi) -> MaxMessage | None:

@@ -6,6 +6,7 @@ import threading
 import os
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import TYPE_CHECKING
 
 import httpx
 from dotenv import load_dotenv
@@ -15,6 +16,8 @@ if __package__ in {None, ""}:
     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from config import MAX_POLL_TIMEOUT, MAX_WEBHOOK_PORT, TOKEN, WEBHOOK_MAX_SECRET, WEBHOOK_MAX_URL
+from database.db_controller import db_controller
+from i18n import normalize_locale, resolve_user_locale, tr
 from max_bot.client import build_max_api
 from max_bot.compat import InlineKeyboardButton, InlineKeyboardMarkup
 from max_bot.context import MaxContext, MaxUpdate
@@ -46,6 +49,9 @@ from max_bot.handlers.start import (
     start,
 )
 
+if TYPE_CHECKING:
+    from max_bot.client import MaxApi
+
 load_dotenv(".env")
 
 logger = logging.getLogger(__name__)
@@ -57,6 +63,14 @@ MENU_MY_ID_TEXT = "\u041c\u043e\u0439 ID"
 MENU_HELP_TEXT = "\u041f\u043e\u043c\u043e\u0449\u044c"
 MENU_LINK_TG_TEXT = "\u0421\u0432\u044f\u0437\u0430\u0442\u044c \u0441 Telegram"
 MENU_BACK_TEXT = "\u21a9\u041d\u0430\u0437\u0430\u0434"
+MENU_TEXT_ALIASES = {"меню", "menu"}
+MENU_CALENDAR_ALIASES = {"календарь", "calendar", "показать календарь", "show calendar"}
+MENU_UPCOMING_ALIASES = {"ближайшие события", "upcoming events"}
+MENU_TEAM_ALIASES = {"участники", "participants"}
+MENU_MY_ID_ALIASES = {"мой id", "my id", "show my id"}
+MENU_HELP_ALIASES = {"помощь", "help"}
+MENU_LINK_TG_ALIASES = {"связать с telegram", "link with telegram"}
+SKIP_ALIASES = {"⏭ пропустить", "⏭ skip", "skip"}
 MAX_WEBHOOK_UPDATE_TYPES = ["message_created", "message_edited", "message_callback", "bot_started"]
 _WEBHOOK_LOOP: asyncio.AbstractEventLoop | None = None
 _WEBHOOK_THREAD: threading.Thread | None = None
@@ -96,24 +110,21 @@ def _sanitize_attachments(attachments: list[dict] | None) -> list[dict] | None:
 async def _send_tg_link_request(tg_id: int, max_id: int) -> None:
     if not TOKEN:
         raise RuntimeError("TG_BOT_TOKEN is not set")
+    locale = await resolve_user_locale(tg_id, platform="tg")
     payload = {
         "chat_id": tg_id,
-        "text": (
-            "\u041f\u0440\u0438\u0448\u0435\u043b \u0437\u0430\u043f\u0440\u043e\u0441 \u043d\u0430 \u0441\u0432\u044f\u0437\u044c "
-            "\u0441 MAX \u0431\u043e\u0442\u043e\u043c.\n"
-            "\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u043e\u0431\u044a\u0435\u0434\u0438\u043d\u0435\u043d\u0438\u0435."
-        ),
+        "text": tr("Пришел запрос на связь с MAX ботом.\nПодтвердите объединение.", locale),
         "reply_markup": {
             "inline_keyboard": [
                 [
                     {
-                        "text": "\u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044c",
+                        "text": tr("Подтвердить", locale),
                         "callback_data": f"link_tg_confirm_{tg_id}_{max_id}",
                     }
                 ],
                 [
                     {
-                        "text": "\u041e\u0442\u043a\u043b\u043e\u043d\u0438\u0442\u044c",
+                        "text": tr("Отклонить", locale),
                         "callback_data": f"link_tg_decline_{tg_id}_{max_id}",
                     }
                 ],
@@ -127,6 +138,7 @@ async def _send_tg_link_request(tg_id: int, max_id: int) -> None:
 
 async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("handle_text")
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="max")
 
     await_time_input = context.chat_data.get("await_time_input")
     if await_time_input:
@@ -186,7 +198,7 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
         reply_markup = generate_time_selector(hours=hours, minutes=minutes, time_type=time_type)
         message_id = context.chat_data.get("time_picker_message_id")
         if message_id:
-            await context.bot.edit_message(message_id=message_id, attachments=reply_markup.to_attachments())
+            await context.bot.edit_message(message_id=message_id, attachments=reply_markup.to_attachments(), locale=locale)
         else:
             await update.message.reply_text("Updated.", reply_markup=reply_markup)
 
@@ -233,6 +245,7 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
                 text=text,
                 attachments=reply_markup.to_attachments(),
                 fmt="html",
+                locale=locale,
             )
         else:
             await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
@@ -258,25 +271,26 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
     if await_tg_link:
         raw_value = (update.message.text or "").strip()
         if not raw_value.isdigit():
-            await update.message.reply_text("\u041e\u0442\u043f\u0440\u0430\u0432\u044c\u0442\u0435 \u0447\u0438\u0441\u043b\u043e\u0432\u043e\u0439 Telegram ID.")
+            await update.message.reply_text("Отправьте числовой Telegram ID.")
             return
         tg_id = int(raw_value)
         max_id = update.effective_chat.id
         try:
             await _send_tg_link_request(tg_id=tg_id, max_id=max_id)
             await update.message.reply_text(
-                "\u0417\u0430\u043f\u0440\u043e\u0441 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d \u0432 Telegram. \u041f\u043e\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u0435 \u0432 Telegram \u0431\u043e\u0442\u0435."
+                "Запрос отправлен в Telegram. Подтвердите в Telegram боте."
             )
             context.chat_data.pop("await_tg_link", None)
         except Exception:  # noqa: BLE001
             logger.exception("Failed to send Telegram link request")
-            await update.message.reply_text("\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u0442\u043f\u0440\u0430\u0432\u0438\u0442\u044c \u0437\u0430\u043f\u0440\u043e\u0441 \u0432 Telegram.")
+            await update.message.reply_text("Не удалось отправить запрос в Telegram.")
         return
 
     await update.message.reply_text("Unknown command.")
 
 
 async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="max")
     if update.callback_query:
         data = update.callback_query.data
         if data == "menu_open":
@@ -296,6 +310,7 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
                     message_id=menu_message.id,
                     text=state.get("text") or "",
                     attachments=state.get("attachments"),
+                    locale=locale,
                 )
             else:
                 await update.callback_query.answer()
@@ -351,8 +366,20 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
 
     text = (update.message.text or "").strip()
     normalized = text.strip().lower()
-    if text.startswith("/start") or normalized == "начать":
+    if text.startswith("/start") or normalized in {"начать", "start"}:
         await start(update, context)
+    elif text.startswith("/language"):
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            await update.message.reply_text("Use: /language ru|en")
+        else:
+            selected = normalize_locale(parts[1], default="")
+            if selected not in {"ru", "en"}:
+                await update.message.reply_text("Use: /language ru|en")
+            else:
+                await db_controller.set_user_language(user_id=update.effective_chat.id, language_code=selected, platform="max")
+                context.chat_data["locale"] = selected
+                await update.message.reply_text("Язык переключен на русский." if selected == "ru" else "Language switched to English.")
     elif text.startswith("/help"):
         await handle_help(update, context)
     elif text.startswith("/team"):
@@ -361,30 +388,28 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
         await show_calendar(update, context)
     elif text.startswith("/show_my_id") or text.startswith("/my_id"):
         await update.message.reply_text(f"Ваш ID: {update.effective_chat.id}")
-    elif normalized == MENU_TEXT.lower():
+    elif normalized in MENU_TEXT_ALIASES:
         await update.message.reply_text("Меню:", reply_markup=build_menu_markup())
-    elif normalized == MENU_CALENDAR_TEXT.lower():
+    elif normalized in MENU_CALENDAR_ALIASES:
         await show_calendar(update, context)
-    elif normalized == "показать календарь":
-        await show_calendar(update, context)
-    elif normalized == MENU_UPCOMING_TEXT.lower():
+    elif normalized in MENU_UPCOMING_ALIASES:
         await show_upcoming_events(update, context)
-    elif normalized == MENU_TEAM_TEXT.lower():
+    elif normalized in MENU_TEAM_ALIASES:
         await handle_team_command(update, context)
-    elif normalized == MENU_MY_ID_TEXT.lower() or normalized in {"my id", "show my id"}:
+    elif normalized in MENU_MY_ID_ALIASES:
         await update.message.reply_text(f"Ваш ID: {update.effective_chat.id}")
-    elif normalized == MENU_LINK_TG_TEXT.lower():
+    elif normalized in MENU_LINK_TG_ALIASES:
         context.chat_data["await_tg_link"] = True
         await update.message.reply_text(
             "Для синхронизации событий с Telegram ботом FamPlanner_bot пришлите свой telegram ID."
         )
-    elif normalized == MENU_HELP_TEXT.lower():
+    elif normalized in MENU_HELP_ALIASES:
         await handle_help(update, context)
-    elif text == MAIN_MENU_CALENDAR_TEXT:
+    elif normalized in {MAIN_MENU_CALENDAR_TEXT.lower(), "📅 show calendar"}:
         await show_calendar(update, context)
-    elif text == MAIN_MENU_UPCOMING_TEXT:
+    elif normalized in {MAIN_MENU_UPCOMING_TEXT.lower(), "🗓 upcoming events"}:
         await show_upcoming_events(update, context)
-    elif text == SKIP_LOCATION_TEXT:
+    elif normalized in SKIP_ALIASES or text == SKIP_LOCATION_TEXT:
         await handle_skip(update, context)
     else:
         await handle_text(update, context)

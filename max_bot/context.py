@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from i18n import resolve_user_locale, tr, translate_markup
 from max_bot.client import MaxApi
 from max_bot.compat import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
@@ -15,6 +16,7 @@ class MaxChat:
     id: str | int
     first_name: str | None = None
     last_name: str | None = None
+    language_code: str | None = None
     is_bot: bool | None = None
     type: str = "private"
 
@@ -55,42 +57,47 @@ class MaxMessage:
         parse_mode: str | None = None,
         include_menu: bool = True,
     ) -> "MaxMessage | None":
-        if include_menu:
-            menu_text = "\u041c\u0435\u043d\u044e"
-            menu_callback = "menu_open"
-            if reply_markup is None:
-                reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(menu_text, callback_data=menu_callback)]])
-            elif isinstance(reply_markup, InlineKeyboardMarkup):
-                has_menu = any(
-                    btn.text == menu_text and (btn.callback_data == menu_callback or btn.callback_data is None)
-                    for row in reply_markup.inline_keyboard
-                    for btn in row
-                )
-                if not has_menu:
-                    reply_markup.inline_keyboard.append([InlineKeyboardButton(menu_text, callback_data=menu_callback)])
-            elif isinstance(reply_markup, ReplyKeyboardMarkup):
-                has_menu = any(btn.text == menu_text for row in reply_markup.keyboard for btn in row)
-                if not has_menu:
-                    reply_markup.keyboard.append([KeyboardButton(menu_text)])
-
-        attachments = None
-        if reply_markup:
-            attachments = reply_markup.to_attachments()
-        fmt = None
-        if parse_mode == "HTML":
-            fmt = "html"
         if self.recipient and self.recipient.is_bot is False:
             target_user_id = self.recipient.id
         elif self.sender and self.sender.is_bot is False:
             target_user_id = self.sender.id
         else:
             target_user_id = self.recipient.id if self.recipient else self.sender.id
+
+        locale = await resolve_user_locale(target_user_id, platform="max")
+
+        if include_menu:
+            menu_text = tr("Меню", locale)
+            menu_callback = "menu_open"
+            if reply_markup is None:
+                reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton(menu_text, callback_data=menu_callback)]])
+            elif isinstance(reply_markup, InlineKeyboardMarkup):
+                has_menu = any(
+                    btn.text in {menu_text, "Меню", "Menu"} and (btn.callback_data == menu_callback or btn.callback_data is None)
+                    for row in reply_markup.inline_keyboard
+                    for btn in row
+                )
+                if not has_menu:
+                    reply_markup.inline_keyboard.append([InlineKeyboardButton(menu_text, callback_data=menu_callback)])
+            elif isinstance(reply_markup, ReplyKeyboardMarkup):
+                has_menu = any(btn.text in {menu_text, "Меню", "Menu"} for row in reply_markup.keyboard for btn in row)
+                if not has_menu:
+                    reply_markup.keyboard.append([KeyboardButton(menu_text)])
+
+        reply_markup = translate_markup(reply_markup, locale)
+        attachments = None
+        if reply_markup:
+            attachments = reply_markup.to_attachments()
+        fmt = None
+        if parse_mode == "HTML":
+            fmt = "html"
         response = await self.bot.send_message(
-            text=text,
+            text=tr(text, locale),
             user_id=target_user_id,
             attachments=attachments,
             fmt=fmt,
             include_menu=include_menu,
+            locale=locale,
         )
         message_data = response.get("message") if isinstance(response, dict) else None
         if not message_data:
@@ -120,15 +127,23 @@ class MaxCallbackQuery:
         return None
 
     async def edit_message_text(self, text: str, reply_markup: InlineKeyboardMarkup | None = None, parse_mode: str | None = None) -> None:
-        attachments = reply_markup.to_attachments() if reply_markup else []
+        locale = await resolve_user_locale(getattr(self.from_user, "id", None), platform="max")
         fmt = None
         if parse_mode == "HTML":
             fmt = "html"
-        await self.bot.edit_message(message_id=self.message.id, text=text, attachments=attachments, fmt=fmt)
+        await self.bot.edit_message(
+            message_id=self.message.id,
+            text=tr(text, locale),
+            attachments=translate_markup(reply_markup, locale).to_attachments() if reply_markup else [],
+            fmt=fmt,
+            locale=locale,
+        )
 
     async def edit_message_reply_markup(self, reply_markup: InlineKeyboardMarkup | None = None) -> None:
-        attachments = reply_markup.to_attachments() if reply_markup else []
-        await self.bot.edit_message(message_id=self.message.id, attachments=attachments)
+        locale = await resolve_user_locale(getattr(self.from_user, "id", None), platform="max")
+        translated = translate_markup(reply_markup, locale)
+        attachments = translated.to_attachments() if translated else []
+        await self.bot.edit_message(message_id=self.message.id, attachments=attachments, locale=locale)
 
 
 @dataclass

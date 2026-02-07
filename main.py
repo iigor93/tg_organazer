@@ -1,5 +1,6 @@
 import datetime
 import logging
+from typing import Any, Callable
 
 from dotenv import load_dotenv
 from telegram import BotCommand, Update
@@ -33,12 +34,76 @@ from handlers.events import (
     show_upcoming_events,
 )
 from handlers.link import handle_link_callback
-from handlers.start import handle_help, handle_location, handle_skip, start
+from handlers.start import handle_help, handle_language, handle_location, handle_skip, start
+from i18n import resolve_user_locale, tr, translate_markup
 
 load_dotenv(".env")
 
 
 logger = logging.getLogger(__name__)
+
+
+def _arg_get(args: tuple[Any, ...], kwargs: dict[str, Any], index: int, key: str) -> Any:
+    if key in kwargs:
+        return kwargs[key]
+    if len(args) > index:
+        return args[index]
+    return None
+
+
+def _arg_set(args: tuple[Any, ...], kwargs: dict[str, Any], index: int, key: str, value: Any) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    if key in kwargs:
+        kwargs[key] = value
+        return args, kwargs
+    mutable = list(args)
+    while len(mutable) <= index:
+        mutable.append(None)
+    mutable[index] = value
+    return tuple(mutable), kwargs
+
+
+def patch_telegram_bot_i18n(bot: Any) -> None:
+    if getattr(bot, "_i18n_patched", False):
+        return
+
+    original_send_message: Callable[..., Any] = bot.send_message
+    original_edit_message_text: Callable[..., Any] = bot.edit_message_text
+    original_edit_message_reply_markup: Callable[..., Any] = bot.edit_message_reply_markup
+
+    async def send_message_i18n(*args: Any, **kwargs: Any) -> Any:
+        chat_id = _arg_get(args, kwargs, 0, "chat_id")
+        locale = await resolve_user_locale(chat_id, platform="tg")
+        text = _arg_get(args, kwargs, 1, "text")
+        if isinstance(text, str):
+            args, kwargs = _arg_set(args, kwargs, 1, "text", tr(text, locale))
+        reply_markup = _arg_get(args, kwargs, 2, "reply_markup")
+        if reply_markup is not None:
+            args, kwargs = _arg_set(args, kwargs, 2, "reply_markup", translate_markup(reply_markup, locale))
+        return await original_send_message(*args, **kwargs)
+
+    async def edit_message_text_i18n(*args: Any, **kwargs: Any) -> Any:
+        text = _arg_get(args, kwargs, 0, "text")
+        chat_id = _arg_get(args, kwargs, 1, "chat_id")
+        locale = await resolve_user_locale(chat_id, platform="tg")
+        if isinstance(text, str):
+            args, kwargs = _arg_set(args, kwargs, 0, "text", tr(text, locale))
+        reply_markup = _arg_get(args, kwargs, 7, "reply_markup")
+        if reply_markup is not None:
+            args, kwargs = _arg_set(args, kwargs, 7, "reply_markup", translate_markup(reply_markup, locale))
+        return await original_edit_message_text(*args, **kwargs)
+
+    async def edit_message_reply_markup_i18n(*args: Any, **kwargs: Any) -> Any:
+        chat_id = _arg_get(args, kwargs, 0, "chat_id")
+        locale = await resolve_user_locale(chat_id, platform="tg")
+        reply_markup = _arg_get(args, kwargs, 3, "reply_markup")
+        if reply_markup is not None:
+            args, kwargs = _arg_set(args, kwargs, 3, "reply_markup", translate_markup(reply_markup, locale))
+        return await original_edit_message_reply_markup(*args, **kwargs)
+
+    bot.send_message = send_message_i18n  # type: ignore[method-assign]
+    bot.edit_message_text = edit_message_text_i18n  # type: ignore[method-assign]
+    bot.edit_message_reply_markup = edit_message_reply_markup_i18n  # type: ignore[method-assign]
+    bot._i18n_patched = True
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -209,13 +274,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def handle_my_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="tg")
     user_id = update.effective_user.id if update.effective_user else None
     if user_id is None and update.message:
         user_id = update.message.chat_id
     if user_id is None:
-        await update.message.reply_text("Не удалось определить ваш ID.")
+        await update.message.reply_text(tr("Не удалось определить ваш ID.", locale))
         return
-    await update.message.reply_text(f"{user_id}")
+    await update.message.reply_text(tr("Ваш ID: {user_id}", locale).format(user_id=user_id))
 
 
 async def all_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -226,14 +292,23 @@ async def all_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def set_commands(app):
-    await app.bot.set_my_commands(
-        [
-            BotCommand("start", "Запустить бота"),
-            BotCommand("my_id", "Показать мой Telegram ID"),
-            BotCommand("team", "Управление участниками"),
-            BotCommand("help", "Help"),
-        ]
-    )
+    commands_ru = [
+        BotCommand("start", "Запустить бота"),
+        BotCommand("my_id", "Показать мой Telegram ID"),
+        BotCommand("team", "Управление участниками"),
+        BotCommand("help", "Помощь"),
+        BotCommand("language", "Сменить язык"),
+    ]
+    commands_en = [
+        BotCommand("start", "Start bot"),
+        BotCommand("my_id", "Show my Telegram ID"),
+        BotCommand("team", "Manage participants"),
+        BotCommand("help", "Help"),
+        BotCommand("language", "Change language"),
+    ]
+    await app.bot.set_my_commands(commands_ru, language_code="ru")
+    await app.bot.set_my_commands(commands_en, language_code="en")
+    await app.bot.set_my_commands(commands_en)
     if SERVICE_ACCOUNTS:
         try:
             for service_account in SERVICE_ACCOUNTS.split(";"):
@@ -248,17 +323,19 @@ async def shutdown(app):
 
 def main() -> None:
     application = ApplicationBuilder().token(TOKEN).post_shutdown(shutdown).build()
+    patch_telegram_bot_i18n(application.bot)
 
     # start, Получение геолокации и Пропуск геолокации
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", handle_help))
+    application.add_handler(CommandHandler("language", handle_language))
     application.add_handler(CommandHandler("team", handle_team_command))
     application.add_handler(CommandHandler("my_id", handle_my_id))
     application.add_handler(MessageHandler(filters.LOCATION, handle_location))
-    application.add_handler(MessageHandler(filters.Regex("^⏭ Пропустить$"), handle_skip))
+    application.add_handler(MessageHandler(filters.Regex(r"^⏭ (Пропустить|Skip)$"), handle_skip))
 
     # Календарь
-    application.add_handler(MessageHandler(filters.Regex("^📅 Показать календарь$"), show_calendar))
+    application.add_handler(MessageHandler(filters.Regex(r"^📅 (Показать календарь|Show calendar)$"), show_calendar))
     application.add_handler(CallbackQueryHandler(handle_calendar_callback, pattern="^cal_"))
 
     # Создание\удаление события
@@ -272,7 +349,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_reschedule_event_callback, pattern="^reschedule_event_"))
     application.add_handler(CallbackQueryHandler(handle_emoji_callback, pattern="^emoji_"))
     application.add_handler(CallbackQueryHandler(handle_link_callback, pattern="^link_tg_"))
-    application.add_handler(MessageHandler(filters.Regex("^🗓 Ближайшие события$"), show_upcoming_events))
+    application.add_handler(MessageHandler(filters.Regex(r"^🗓 (Ближайшие события|Upcoming events)$"), show_upcoming_events))
 
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))

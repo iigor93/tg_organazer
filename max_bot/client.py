@@ -5,6 +5,7 @@ from typing import Any
 import httpx
 
 from config import MAX_API_BASE, MAX_BOT_TOKEN
+from i18n import resolve_user_locale, tr, translate_max_attachments
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,11 @@ class MaxApi:
         notify: bool | None = True,
         disable_link_preview: bool | None = None,
         include_menu: bool = True,
+        locale: str | None = None,
     ) -> dict:
+        if locale is None:
+            locale = await resolve_user_locale(user_id or chat_id, platform="max")
+
         params: dict[str, Any] = {}
         if user_id is not None:
             params["user_id"] = user_id
@@ -91,7 +96,7 @@ class MaxApi:
             params["disable_link_preview"] = disable_link_preview
 
         if include_menu:
-            menu_text = "\u041c\u0435\u043d\u044e"
+            menu_text = tr("Меню", locale)
             menu_payload = "menu_open"
             menu_button = {"type": "callback", "text": menu_text, "payload": menu_payload}
             if attachments is None:
@@ -107,15 +112,14 @@ class MaxApi:
                 else:
                     payload = inline_keyboard.setdefault("payload", {})
                     buttons = payload.setdefault("buttons", [])
-                    has_menu = any(
-                        btn.get("text") == menu_text and btn.get("payload") == menu_payload for row in buttons for btn in row
-                    )
+                    has_menu = any(btn.get("payload") == menu_payload for row in buttons for btn in row)
                     if not has_menu:
                         buttons.append([menu_button])
 
-        payload: dict[str, Any] = {"text": text}
-        if attachments is not None:
-            payload["attachments"] = attachments
+        translated_attachments = translate_max_attachments(attachments, locale)
+        payload: dict[str, Any] = {"text": tr(text, locale)}
+        if translated_attachments is not None:
+            payload["attachments"] = translated_attachments
         if fmt:
             payload["format"] = fmt
         if notify is not None:
@@ -130,13 +134,14 @@ class MaxApi:
         attachments: list[dict] | None = None,
         fmt: str | None = None,
         notify: bool | None = True,
+        locale: str | None = None,
     ) -> dict:
         params = {"message_id": message_id}
         payload: dict[str, Any] = {}
         if text is not None:
-            payload["text"] = text
+            payload["text"] = tr(text, locale)
         if attachments is not None:
-            payload["attachments"] = attachments
+            payload["attachments"] = translate_max_attachments(attachments, locale)
         if fmt:
             payload["format"] = fmt
         if notify is not None:

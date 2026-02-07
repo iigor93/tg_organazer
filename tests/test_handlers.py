@@ -17,7 +17,8 @@ from tests.fakes import DummyMessage, make_update_with_callback, make_update_wit
 @pytest.mark.asyncio
 async def test_start_creates_user_and_replies(db_session_fixture):
     update = make_update_with_message()
-    context = type("DummyContext", (), {"user_data": {}})()
+    data: dict = {}
+    context = type("DummyContext", (), {"user_data": data, "chat_data": data})()
 
     await start(update, context)
 
@@ -36,7 +37,9 @@ async def test_handle_contact_creates_relation(db_session_fixture):
     update = make_update_with_message(message=message, user_id=1, first_name="Alice")
     update.message.contact = contact
 
-    await handle_contact(update, context=None)
+    data: dict = {}
+    context = type("DummyContext", (), {"user_data": data, "chat_data": data})()
+    await handle_contact(update, context=context)
 
     assert message.replies
 
@@ -44,7 +47,9 @@ async def test_handle_contact_creates_relation(db_session_fixture):
 @pytest.mark.asyncio
 async def test_show_calendar_returns_markup(db_session_fixture):
     update = make_update_with_message()
-    await show_calendar(update, context=None)
+    data: dict = {}
+    context = type("DummyContext", (), {"user_data": data, "chat_data": data})()
+    await show_calendar(update, context=context)
 
     assert update.message.replies
     reply = update.message.replies[0]
@@ -62,7 +67,9 @@ async def test_calendar_select_lists_events(db_session_fixture):
         user_id=1,
     )
 
-    await handle_calendar_callback(update, context=None)
+    data: dict = {}
+    context = type("DummyContext", (), {"user_data": data, "chat_data": data})()
+    await handle_calendar_callback(update, context=context)
 
     assert update.callback_query.edits
     edit = update.callback_query.edits[0]
@@ -96,7 +103,7 @@ async def test_create_event_flow_and_save(db_session_fixture, context):
     )
     update.callback_query.message = DummyMessage()
     await handle_create_event_callback(update, context)
-    assert context.user_data.get("await_event_description") is True
+    assert isinstance(context.user_data.get("await_event_description"), dict)
 
     text_update = make_update_with_message(message=DummyMessage(text="Desc"), user_id=1)
     from main import handle_text
@@ -124,7 +131,9 @@ async def test_delete_event_by_id(db_session_fixture):
     )
     update.callback_query.message = DummyMessage()
 
-    await handle_delete_event_callback(update, context=None)
+    data: dict = {}
+    context = type("DummyContext", (), {"user_data": data, "chat_data": data})()
+    await handle_delete_event_callback(update, context=context)
 
     assert update.callback_query.edits
 
@@ -138,6 +147,8 @@ async def test_show_upcoming_events(db_session_fixture):
     await db_controller.save_event(event)
 
     update = make_update_with_message(user_id=1)
-    await show_upcoming_events(update, context=None)
+    data: dict = {}
+    context = type("DummyContext", (), {"user_data": data, "chat_data": data})()
+    await show_upcoming_events(update, context=context)
 
     assert update.message.replies

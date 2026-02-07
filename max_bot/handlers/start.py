@@ -8,6 +8,7 @@ from timezonefinder import TimezoneFinder
 
 from database.db_controller import db_controller
 from entities import MaxUser
+from i18n import normalize_locale, resolve_user_locale, tr
 from max_bot.handlers.cal import show_calendar
 
 SKIP_LOCATION_TEXT = "⏭ Пропустить"
@@ -33,6 +34,8 @@ async def start(update: MaxUpdate, context: MaxContext) -> None:
     user = update.effective_chat
     tg_user = MaxUser.model_validate(user)
     db_user = await db_controller.save_update_max_user(max_user=tg_user)
+    locale = await resolve_user_locale(user.id, platform="max", preferred_language_code=tg_user.language_code)
+    await db_controller.set_user_language(user_id=user.id, language_code=normalize_locale(locale), platform="max")
 
     logger.info(f"*** DB user: {db_user}")
 
@@ -44,8 +47,10 @@ async def start(update: MaxUpdate, context: MaxContext) -> None:
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
     await update.message.reply_text(
-        f"Привет, {user.first_name}!\n"
-        "Для получения событий по твоему часовому поясу, тебе нужно поделиться геолокацией. Если ты живешь по Москоскому времени, то можешь нажать «Пропустить».",
+        tr(
+            "Привет, {name}!\nДля получения событий по твоему часовому поясу, тебе нужно поделиться геолокацией. Если ты живешь по Москоскому времени, то можешь нажать «Пропустить».",
+            locale,
+        ).format(name=user.first_name),
         reply_markup=reply_markup,
         include_menu=False,
     )
@@ -133,16 +138,18 @@ async def handle_skip(update: MaxUpdate, context: MaxContext) -> None:
 
 
 async def show_main_menu_keyboard(message: MaxMessage) -> None:
+    locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="max")
     keyboard = [[KeyboardButton(MAIN_MENU_CALENDAR_TEXT)], [KeyboardButton(MAIN_MENU_UPCOMING_TEXT)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-    await message.reply_text("Меню:", reply_markup=reply_markup)
+    await message.reply_text(tr("Меню:", locale), reply_markup=reply_markup)
 
 
 async def show_main_menu(message: MaxMessage, add_text: str | None = None) -> None:
     logger.info("show_main_menu")
 
+    locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="max")
     keyboard = [[KeyboardButton(MAIN_MENU_CALENDAR_TEXT)], [KeyboardButton(MAIN_MENU_UPCOMING_TEXT)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-    text = f"{add_text}\n\nВыберите действие:" if add_text else "Выберите действие:"
+    text = f"{add_text}\n\n{tr('Выберите действие:', locale)}" if add_text else tr("Выберите действие:", locale)
 
     await message.reply_text(text=text, reply_markup=reply_markup)

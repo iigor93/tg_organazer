@@ -9,6 +9,7 @@ from timezonefinder import TimezoneFinder
 from database.db_controller import db_controller
 from entities import TgUser
 from handlers.cal import show_calendar
+from i18n import normalize_locale, resolve_user_locale, tr
 
 logger = logging.getLogger(__name__)
 
@@ -28,19 +29,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_chat
     tg_user = TgUser.model_validate(user)
     db_user = await db_controller.save_update_user(tg_user=tg_user)
+    locale = normalize_locale(tg_user.language_code)
+    await db_controller.set_user_language(user_id=user.id, language_code=locale, platform="tg")
 
     logger.info(f"*** DB user: {db_user}")
 
     keyboard = [[KeyboardButton("⏭ Пропустить")]]
 
-    if update.effective_chat.type == "private":
+    if getattr(update.effective_chat, "type", "private") == "private":
         keyboard.insert(0, [KeyboardButton("📍 Поделиться геолокацией", request_location=True)])
 
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
     await update.message.reply_text(
-        f"Привет, {user.first_name}!\n"
-        "Для получения событий по твоему часовому поясу, тебе нужно поделиться геолокацией. Если ты живешь по Москоскому времени, то можешь нажать «Пропустить».",
+        tr(
+            "Привет, {name}!\nДля получения событий по твоему часовому поясу, тебе нужно поделиться геолокацией. Если ты живешь по Москоскому времени, то можешь нажать «Пропустить».",
+            locale,
+        ).format(name=user.first_name),
         reply_markup=reply_markup,
     )
 
@@ -124,16 +129,40 @@ async def handle_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def show_main_menu_keyboard(message: Message) -> None:
+    locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="tg")
     keyboard = [["📅 Показать календарь"], ["🗓 Ближайшие события"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-    await message.reply_text("Меню:", reply_markup=reply_markup)
+    await message.reply_text(tr("Меню:", locale), reply_markup=reply_markup)
 
 
 async def show_main_menu(message: Message, add_text: str | None = None) -> None:
     logger.info("show_main_menu")
 
+    locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="tg")
     keyboard = [["📅 Показать календарь"], ["🗓 Ближайшие события"]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
-    text = f"{add_text}\n\nВыберите действие:" if add_text else "Выберите действие:"
+    text = f"{add_text}\n\n{tr('Выберите действие:', locale)}" if add_text else tr("Выберите действие:", locale)
 
     await message.reply_text(text=text, reply_markup=reply_markup)
+
+
+async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.message or not update.effective_chat:
+        return
+
+    args = getattr(context, "args", None) or []
+    if not args:
+        await update.message.reply_text("Use: /language ru|en")
+        return
+
+    selected = normalize_locale(args[0], default="")
+    if selected not in {"ru", "en"}:
+        await update.message.reply_text("Use: /language ru|en")
+        return
+
+    await db_controller.set_user_language(user_id=update.effective_chat.id, language_code=selected, platform="tg")
+    context.chat_data["locale"] = selected
+    if selected == "ru":
+        await update.message.reply_text("Язык переключен на русский.")
+    else:
+        await update.message.reply_text("Language switched to English.")

@@ -9,6 +9,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from config import TOKEN, database_url
 from database.db_controller import db_controller
+from i18n import resolve_user_locale, tr
 from max_bot.client import build_max_api
 from max_bot.compat import InlineKeyboardButton as MaxInlineKeyboardButton
 from max_bot.compat import InlineKeyboardMarkup as MaxInlineKeyboardMarkup
@@ -20,14 +21,14 @@ AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_co
 logger = logging.getLogger(__name__)
 
 
-def _build_reminder_text(event: dict, send_now: bool) -> str:
-    text = "Напоминание о событии"
+def _build_reminder_text(event: dict, send_now: bool, locale: str | None = None) -> str:
+    text = tr("Напоминание о событии", locale)
     if not send_now:
-        text += "\nЧерез 1 час:"
+        text += f"\n{tr('Через 1 час:', locale)}"
     start_time = event.get("start_time")
     start_str = start_time.strftime("%H:%M") if start_time else ""
     description = event.get("description") or ""
-    text += f"\nВремя: {start_str}\nОписание: {description}"
+    text += f"\n{tr('Время: {start}', locale).format(start=start_str)}\n{tr('Описание: {description}', locale).format(description=description)}"
     return text
 
 
@@ -58,7 +59,8 @@ async def send_messages(send_now: bool = False):
                 chat_id = event.get("tg_id")
                 if not chat_id:
                     continue
-                text = _build_reminder_text(event, send_now)
+                locale = await resolve_user_locale(chat_id, platform="tg")
+                text = _build_reminder_text(event, send_now, locale=locale)
 
                 event_id = event.get("event_id")
                 reply_markup = None
@@ -66,13 +68,13 @@ async def send_messages(send_now: bool = False):
                     buttons = [
                         [
                             InlineKeyboardButton(
-                                "Перенести на 1 час",
+                                tr("Перенести на 1 час", locale),
                                 callback_data=f"reschedule_event_{event_id}_hour",
                             )
                         ],
                         [
                             InlineKeyboardButton(
-                                "Перенести на завтра",
+                                tr("Перенести на завтра", locale),
                                 callback_data=f"reschedule_event_{event_id}_day",
                             )
                         ],
@@ -86,27 +88,28 @@ async def send_messages(send_now: bool = False):
                 user_id = event.get("tg_id")
                 if not user_id:
                     continue
-                text = _build_reminder_text(event, send_now)
+                locale = await resolve_user_locale(user_id, platform="max")
+                text = _build_reminder_text(event, send_now, locale=locale)
                 event_id = event.get("event_id")
                 attachments = None
                 if event_id:
                     buttons = [
                         [
                             MaxInlineKeyboardButton(
-                                "\u041f\u0435\u0440\u0435\u043d\u0435\u0441\u0442\u0438 \u043d\u0430 1 \u0447\u0430\u0441",
+                                tr("Перенести на 1 час", locale),
                                 callback_data=f"reschedule_event_{event_id}_hour",
                             )
                         ],
                         [
                             MaxInlineKeyboardButton(
-                                "\u041f\u0435\u0440\u0435\u043d\u0435\u0441\u0442\u0438 \u043d\u0430 \u0437\u0430\u0432\u0442\u0440\u0430",
+                                tr("Перенести на завтра", locale),
                                 callback_data=f"reschedule_event_{event_id}_day",
                             )
                         ],
                     ]
                     reply_markup = MaxInlineKeyboardMarkup(buttons)
                     attachments = reply_markup.to_attachments()
-                await max_api.send_message(text=text, user_id=user_id, attachments=attachments, include_menu=False)
+                await max_api.send_message(text=text, user_id=user_id, attachments=attachments, include_menu=False, locale=locale)
                 await asyncio.sleep(0.001)
 
             await engine.dispose()

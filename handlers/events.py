@@ -524,18 +524,25 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text=text, reply_markup=reply_markup)
 
     elif data.startswith("create_event_description_"):
-        target_message_id = query.message.message_id if query.message else None
-        target_chat_id = query.message.chat_id if query.message else None
+        target_message_id = None
+        target_chat_id = None
+        if query.message:
+            target_message_id = getattr(query.message, "message_id", None) or getattr(query.message, "id", None)
+            target_chat_id = getattr(query.message, "chat_id", None)
+        if target_chat_id is None and update.effective_chat:
+            target_chat_id = update.effective_chat.id
         prompt_message_id = None
         prompt_chat_id = None
         if query.message:
             message = await query.message.reply_text(text="Опиши, что будет в событии:")
-            prompt_message_id = message.message_id
-            prompt_chat_id = message.chat_id
+            if message:
+                prompt_message_id = getattr(message, "message_id", None) or getattr(message, "id", None)
+                prompt_chat_id = getattr(message, "chat_id", None)
         elif update.effective_chat:
             message = await context.bot.send_message(chat_id=update.effective_chat.id, text="Опиши, что будет в событии:")
-            prompt_message_id = message.message_id
-            prompt_chat_id = message.chat_id
+            if message:
+                prompt_message_id = getattr(message, "message_id", None) or getattr(message, "id", None)
+                prompt_chat_id = getattr(message, "chat_id", None)
         context.chat_data["await_event_description"] = {
             "message_id": target_message_id,
             "chat_id": target_chat_id,

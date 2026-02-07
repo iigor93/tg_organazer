@@ -145,6 +145,18 @@ class DBController:
             return TgUser.model_validate(user)
 
     @staticmethod
+    async def set_user_language(user_id: int, language_code: str, platform: str | None = None) -> None:
+        user_col = DBController._user_id_column(platform)
+        async with AsyncSessionLocal() as session:
+            existing_user = (await session.execute(select(DB_User).where(user_col == user_id))).scalar_one_or_none()
+            if existing_user:
+                await session.execute(update(DB_User).where(user_col == user_id).values(language_code=language_code))
+            else:
+                user_kwargs = {user_col.key: user_id, "language_code": language_code}
+                session.add(DB_User(**user_kwargs))
+            await session.commit()
+
+    @staticmethod
     async def get_max_user(max_id: int) -> MaxUser | None:
         async with AsyncSessionLocal() as session:
             user = (await session.execute(select(DB_User).where(DB_User.max_id == max_id))).scalar_one_or_none()
