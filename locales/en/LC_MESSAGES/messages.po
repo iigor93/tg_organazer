@@ -136,6 +136,9 @@ msgstr "Choose an action:"
 msgid "✍️ Создать событие на {date}"
 msgstr "✍️ Create event on {date}"
 
+msgid "✍️ Создать событие на <b>{date}</b> \n\n* - поля обязательные для заполнения"
+msgstr "✍️ Create event on <b>{date}</b> \n\n* - required fields"
+
 msgid "События на <b>{date}</b>:"
 msgstr "Events on <b>{date}</b>:"
 
@@ -151,6 +154,24 @@ msgstr "Choose emoji:"
 msgid "Без эмодзи"
 msgstr "No emoji"
 
+msgid "Начало *"
+msgstr "Start *"
+
+msgid "Окончание"
+msgstr "End"
+
+msgid "Повтор"
+msgstr "Repeat"
+
+msgid "Эмодзи"
+msgstr "Emoji"
+
+msgid "💾 Сохранить событие"
+msgstr "💾 Save event"
+
+msgid "не в боте"
+msgstr "not in bot"
+
 msgid "Добавь пользователя, нажми скрепку"
 msgstr "Add a participant, tap the paperclip"
 
@@ -162,6 +183,12 @@ msgstr "Enter minutes (0-59):"
 
 msgid "Укажите время начала события"
 msgstr "Set event start time"
+
+msgid "Укажите время окончания события"
+msgstr "Set event end time"
+
+msgid "\n\n (Время начала события: {time})"
+msgstr "\n\n (Event start time: {time})"
 
 msgid "Опиши, что будет в событии:"
 msgstr "Describe the event:"
@@ -177,6 +204,30 @@ msgstr "Event not found"
 
 msgid "Только просмотр"
 msgstr "Read-only"
+
+msgid "📅 Дата: {value}"
+msgstr "📅 Date: {value}"
+
+msgid "⏰ Начало: {value}"
+msgstr "⏰ Start: {value}"
+
+msgid "⏳ Окончание: {value}"
+msgstr "⏳ End: {value}"
+
+msgid "📝 Описание: {value}"
+msgstr "📝 Description: {value}"
+
+msgid "🔁 Повтор: {value}"
+msgstr "🔁 Repeat: {value}"
+
+msgid "👤 Создатель: {value}"
+msgstr "👤 Creator: {value}"
+
+msgid "👥 Участники: {value}"
+msgstr "👥 Participants: {value}"
+
+msgid "* - поля обязательные для заполнения"
+msgstr "* - required fields"
 
 msgid "Ближайшие события:"
 msgstr "Upcoming events:"

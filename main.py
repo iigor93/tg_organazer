@@ -124,18 +124,19 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("handle_text")
     logger.info(update)
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="tg")
 
     await_time_input = context.chat_data.get("await_time_input")
     if await_time_input:
         event = context.chat_data.get("event")
         if not event:
             context.chat_data.pop("await_time_input", None)
-            await update.message.reply_text("Событие не найдено. Откройте создание события заново.")
+            await update.message.reply_text(tr("Событие не найдено. Откройте создание события заново.", locale))
             return
 
         raw_value = (update.message.text or "").strip()
         if not raw_value.isdigit():
-            await update.message.reply_text("Введите число.")
+            await update.message.reply_text(tr("Введите число.", locale))
             return
 
         value = int(raw_value)
@@ -143,11 +144,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         time_type = await_time_input.get("time_type")
 
         if field == "hour" and not (0 <= value <= 23):
-            await update.message.reply_text("Часы должны быть от 0 до 23.")
+            await update.message.reply_text(tr("Часы должны быть от 0 до 23.", locale))
             return
 
         if field == "minute" and not (0 <= value <= 59):
-            await update.message.reply_text("Минуты должны быть от 0 до 59.")
+            await update.message.reply_text(tr("Минуты должны быть от 0 до 59.", locale))
             return
 
         base_time = event.start_time if time_type == "start" else event.stop_time
@@ -190,7 +191,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 reply_markup=reply_markup,
             )
         else:
-            await update.message.reply_text("Готово.", reply_markup=reply_markup)
+            await update.message.reply_text(tr("Готово.", locale), reply_markup=reply_markup)
 
         if update.message:
             try:
@@ -226,6 +227,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             year=year,
             month=month,
             day=day,
+            locale=locale,
             has_participants=has_participants,
             show_details=bool(context.chat_data.get("edit_event_id")),
             show_back_btn=show_back_btn,
@@ -273,7 +275,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 logger.exception("Failed to delete description prompt message")
 
         return
-    await update.message.reply_text("Используйте кнопки для навигации.")
+    await update.message.reply_text(tr("Используйте кнопки для навигации.", locale))
 
 
 async def handle_my_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

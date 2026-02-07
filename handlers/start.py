@@ -28,16 +28,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     user = update.effective_chat
     tg_user = TgUser.model_validate(user)
+    if update.effective_user and not tg_user.language_code:
+        tg_user.language_code = getattr(update.effective_user, "language_code", None)
     db_user = await db_controller.save_update_user(tg_user=tg_user)
     locale = normalize_locale(tg_user.language_code)
     await db_controller.set_user_language(user_id=user.id, language_code=locale, platform="tg")
 
     logger.info(f"*** DB user: {db_user}")
 
-    keyboard = [[KeyboardButton("⏭ Пропустить")]]
+    keyboard = [[KeyboardButton(tr("⏭ Пропустить", locale))]]
 
     if getattr(update.effective_chat, "type", "private") == "private":
-        keyboard.insert(0, [KeyboardButton("📍 Поделиться геолокацией", request_location=True)])
+        keyboard.insert(0, [KeyboardButton(tr("📍 Поделиться геолокацией", locale), request_location=True)])
 
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
@@ -61,6 +63,7 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     context.chat_data.pop("await_time_input", None)
     context.chat_data.pop("time_input_prompt_message_id", None)
     context.chat_data.pop("time_input_prompt_chat_id", None)
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="tg")
     text = (
         "👋 Привет! Я помогу планировать дела и напоминать о событиях.\n\n"
         "📌 Основные команды:\n"
@@ -83,7 +86,7 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         "В календаре выбери дату и нажми «Удалить событие».\n\n"
         "Если что-то не работает — просто напиши @FamPlanner, помогу разобраться 😊"
     )
-    await update.message.reply_text(text=text)
+    await update.message.reply_text(text=tr(text, locale))
 
 
 async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -130,7 +133,7 @@ async def handle_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 async def show_main_menu_keyboard(message: Message) -> None:
     locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="tg")
-    keyboard = [["📅 Показать календарь"], ["🗓 Ближайшие события"]]
+    keyboard = [[tr("📅 Показать календарь", locale)], [tr("🗓 Ближайшие события", locale)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
     await message.reply_text(tr("Меню:", locale), reply_markup=reply_markup)
 
@@ -139,7 +142,7 @@ async def show_main_menu(message: Message, add_text: str | None = None) -> None:
     logger.info("show_main_menu")
 
     locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="tg")
-    keyboard = [["📅 Показать календарь"], ["🗓 Ближайшие события"]]
+    keyboard = [[tr("📅 Показать календарь", locale)], [tr("🗓 Ближайшие события", locale)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
     text = f"{add_text}\n\n{tr('Выберите действие:', locale)}" if add_text else tr("Выберите действие:", locale)
 
@@ -151,18 +154,20 @@ async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     args = getattr(context, "args", None) or []
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="tg")
     if not args:
-        await update.message.reply_text("Use: /language ru|en")
+        await update.message.reply_text(tr("Use: /language ru|en", locale))
         return
 
     selected = normalize_locale(args[0], default="")
     if selected not in {"ru", "en"}:
-        await update.message.reply_text("Use: /language ru|en")
+        await update.message.reply_text(tr("Use: /language ru|en", locale))
         return
 
     await db_controller.set_user_language(user_id=update.effective_chat.id, language_code=selected, platform="tg")
     context.chat_data["locale"] = selected
     if selected == "ru":
-        await update.message.reply_text("Язык переключен на русский.")
+        await update.message.reply_text(tr("Язык переключен на русский.", selected))
     else:
-        await update.message.reply_text("Language switched to English.")
+        await update.message.reply_text(tr("Language switched to English.", selected))
+    await show_main_menu_keyboard(update.message)
