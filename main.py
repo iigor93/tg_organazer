@@ -100,10 +100,13 @@ def patch_telegram_bot_i18n(bot: Any) -> None:
             args, kwargs = _arg_set(args, kwargs, 3, "reply_markup", translate_markup(reply_markup, locale))
         return await original_edit_message_reply_markup(*args, **kwargs)
 
-    bot.send_message = send_message_i18n  # type: ignore[method-assign]
-    bot.edit_message_text = edit_message_text_i18n  # type: ignore[method-assign]
-    bot.edit_message_reply_markup = edit_message_reply_markup_i18n  # type: ignore[method-assign]
-    bot._i18n_patched = True
+    try:
+        bot.send_message = send_message_i18n  # type: ignore[method-assign]
+        bot.edit_message_text = edit_message_text_i18n  # type: ignore[method-assign]
+        bot.edit_message_reply_markup = edit_message_reply_markup_i18n  # type: ignore[method-assign]
+        bot._i18n_patched = True
+    except AttributeError:
+        logger.warning("Telegram bot instance is immutable; runtime i18n patch is disabled for ExtBot.")
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
