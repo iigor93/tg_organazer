@@ -418,6 +418,12 @@ msgstr "Time: {start}"
 msgid "Описание: {description}"
 msgstr "Description: {description}"
 
+msgid "{creator} добавил событие"
+msgstr "{creator} added an event"
+
+msgid "Дата: {date}"
+msgstr "Date: {date}"
+
 msgid "Никогда"
 msgstr "Never"
 

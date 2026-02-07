@@ -8,6 +8,7 @@ from max_bot.context import MaxContext, MaxUpdate
 from config import MONTH_NAMES
 from database.db_controller import db_controller
 from entities import Event, Recurrent, MaxUser
+from i18n import resolve_user_locale, tr
 
 logger = logging.getLogger(__name__)
 
@@ -689,15 +690,23 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
             if not creator_name:
                 creator_name = update.effective_chat.first_name or update.effective_chat.username or str(update.effective_chat.id)
             creator_name = str(creator_name).strip().title() if creator_name else str(update.effective_chat.id)
-            text = (
-                f"{creator_name} добавил событие"
-                f"\n{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year} "
-                f"время {event.start_time.strftime('%H:%M')}"
+            date_text = f"{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year}"
+            time_range = (
+                f"{event.start_time.strftime('%H:%M')}"
                 f"{'-' + event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
-                f"\n{format_description(event.description)}"
             )
 
             for user in event.participants:
+                recipient_locale = await resolve_user_locale(user, platform="max")
+                text = (
+                    tr("{creator} добавил событие", recipient_locale).format(creator=creator_name)
+                    + "\n"
+                    + tr("Дата: {date}", recipient_locale).format(date=date_text)
+                    + "\n"
+                    + tr("Время: {start}", recipient_locale).format(start=time_range)
+                    + "\n"
+                    + tr("Описание: {description}", recipient_locale).format(description=event.description)
+                )
                 new_event_id = await db_controller.resave_event_to_participant(event_id=event_id, user_id=user, platform="max")
                 if new_event_id:
                     await db_controller.set_event_participants(event_id=new_event_id, participant_ids=event.participants, platform="max")
@@ -705,7 +714,7 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
                 cancel_data = f"create_participant_event_cancel_{new_event_id}"
                 if creator_id:
                     cancel_data = f"{cancel_data}_{creator_id}"
-                btn = [[InlineKeyboardButton("Не добавлять", callback_data=cancel_data)]]
+                btn = [[InlineKeyboardButton(tr("Не добавлять", recipient_locale), callback_data=cancel_data)]]
                 reply_markup = InlineKeyboardMarkup(btn)
                 await context.bot.send_message(text=text, user_id=user, attachments=reply_markup.to_attachments())
 
@@ -980,6 +989,7 @@ async def handle_event_participants_callback(update: MaxUpdate, context: MaxCont
     user = update.effective_chat
     tg_user = MaxUser.model_validate(user)
     db_user = await db_controller.save_update_max_user(max_user=tg_user)
+    locale = await resolve_user_locale(user.id, platform="max", preferred_language_code=tg_user.language_code)
     logger.info(f"*** DB user: {db_user}")
 
     if "cancel" in data:
@@ -998,7 +1008,7 @@ async def handle_event_participants_callback(update: MaxUpdate, context: MaxCont
         except Exception:
             logger.exception("Failed to delete event for participant cancel")
 
-        await query.edit_message_text(text="??????? ?? ????????? ? ?????????.")
+        await query.edit_message_text(text=tr("Событие не добавлено в календарь.", locale))
 
         if creator_id and update.effective_chat and creator_id != update.effective_chat.id:
             participant_name = None
@@ -1016,13 +1026,10 @@ async def handle_event_participants_callback(update: MaxUpdate, context: MaxCont
                 str(participant_name).strip().title()
                 if participant_name else str(update.effective_chat.id)
             )
-            text = (
-                f"???????? {participant_name} "
-                f"????????? "
-                f"?? "
-                f"??????? "
-                f"? "
-                f"???????: {event_info}"
+            creator_locale = await resolve_user_locale(creator_id, platform="max")
+            text = tr("Участник {user_name} отказался от участия в событии: {event_info}", creator_locale).format(
+                user_name=participant_name,
+                event_info=event_info,
             )
             try:
                 await context.bot.send_message(user_id=creator_id, text=text)

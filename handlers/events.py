@@ -675,26 +675,34 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
         if event.participants:
             bot = telegram.Bot(token=TOKEN)
-
-            text = (
-                f"{str(update.effective_chat.first_name).title()} добавил событие"
-                f"\n{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year} "
-                f"время {event.start_time.strftime('%H:%M')}"
+            creator_name = str(update.effective_chat.first_name).title()
+            date_text = f"{event.event_date.day}.{event.event_date.month:02d}.{event.event_date.year}"
+            time_range = (
+                f"{event.start_time.strftime('%H:%M')}"
                 f"{'-' + event.stop_time.strftime('%H:%M') if event.stop_time else ''}"
-                f"\n{format_description(event.description)}"
             )
+            for participant_id in event.participants:
+                recipient_locale = await resolve_user_locale(participant_id, platform="tg")
+                text = (
+                    tr("{creator} добавил событие", recipient_locale).format(creator=creator_name)
+                    + "\n"
+                    + tr("Дата: {date}", recipient_locale).format(date=date_text)
+                    + "\n"
+                    + tr("Время: {start}", recipient_locale).format(start=time_range)
+                    + "\n"
+                    + tr("Описание: {description}", recipient_locale).format(description=event.description)
+                )
 
-            for user in event.participants:
-                new_event_id = await db_controller.resave_event_to_participant(event_id=event_id, user_id=user)
+                new_event_id = await db_controller.resave_event_to_participant(event_id=event_id, user_id=participant_id)
                 if new_event_id:
                     await db_controller.set_event_participants(event_id=new_event_id, participant_ids=event.participants)
                 creator_id = update.effective_chat.id if update.effective_chat else None
                 cancel_data = f"create_participant_event_cancel_{new_event_id}"
                 if creator_id:
                     cancel_data = f"{cancel_data}_{creator_id}"
-                btn = [[InlineKeyboardButton(tr("Не добавлять", locale), callback_data=cancel_data)]]
+                btn = [[InlineKeyboardButton(tr("Не добавлять", recipient_locale), callback_data=cancel_data)]]
                 reply_markup = InlineKeyboardMarkup(btn)
-                await bot.send_message(chat_id=user, text=text, reply_markup=reply_markup)
+                await bot.send_message(chat_id=participant_id, text=text, reply_markup=reply_markup)
 
 
 async def handle_edit_event_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1008,8 +1016,9 @@ async def handle_event_participants_callback(update: Update, context: ContextTyp
         await query.edit_message_text(text=tr("Событие не добавлено в календарь.", locale))
 
         if creator_id and update.effective_chat and creator_id != update.effective_chat.id:
-            user_name = update.effective_chat.full_name or update.effective_chat.first_name or tr("Участник", locale)
-            text = tr("Участник {user_name} отказался от участия в событии: {event_info}", locale).format(
+            creator_locale = await resolve_user_locale(creator_id, platform="tg")
+            user_name = update.effective_chat.full_name or update.effective_chat.first_name or tr("Участник", creator_locale)
+            text = tr("Участник {user_name} отказался от участия в событии: {event_info}", creator_locale).format(
                 user_name=user_name,
                 event_info=event_info,
             )
