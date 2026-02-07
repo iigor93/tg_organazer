@@ -6,7 +6,7 @@ import telegram
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from config import MONTH_NAMES, TOKEN
+from config import TOKEN
 from database.db_controller import db_controller
 from entities import Event, Recurrent, TgUser
 from i18n import format_localized_date, resolve_user_locale, tr
@@ -82,6 +82,7 @@ def _build_delete_events_markup(
     year: int,
     month: int,
     day: int,
+    locale: str | None = None,
 ) -> InlineKeyboardMarkup:
     list_btn = []
     for ev_text, ev_id, is_single in events:
@@ -96,9 +97,9 @@ def _build_delete_events_markup(
         list_btn.append([InlineKeyboardButton(btn_text, callback_data=callback_data)])
 
     if selected_ids:
-        list_btn.append([InlineKeyboardButton("🗑 Удалить", callback_data=f"delete_event_confirm_{year}_{month}_{day}")])
+        list_btn.append([InlineKeyboardButton(tr("🗑 Удалить", locale), callback_data=f"delete_event_confirm_{year}_{month}_{day}")])
     else:
-        list_btn.append([InlineKeyboardButton("Отмена", callback_data=f"cal_select_{year}_{month}_{day}")])
+        list_btn.append([InlineKeyboardButton(tr("Отмена", locale), callback_data=f"cal_select_{year}_{month}_{day}")])
 
     return InlineKeyboardMarkup(list_btn)
 
@@ -628,7 +629,14 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
         from handlers.cal import build_day_view  # local import to avoid circular dependency
 
-        text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
+        text, reply_markup = await build_day_view(
+            user_id=user.id,
+            year=year,
+            month=month,
+            day=day,
+            tz_name=db_user.time_zone,
+            locale=locale,
+        )
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif data.startswith("create_event_save_to_db"):
@@ -655,7 +663,14 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         year, month, day = event.get_date()
         from handlers.cal import build_day_view  # local import to avoid circular dependency
 
-        text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
+        text, reply_markup = await build_day_view(
+            user_id=user.id,
+            year=year,
+            month=month,
+            day=day,
+            tz_name=db_user.time_zone,
+            locale=locale,
+        )
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
         if event.participants:
@@ -677,7 +692,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
                 cancel_data = f"create_participant_event_cancel_{new_event_id}"
                 if creator_id:
                     cancel_data = f"{cancel_data}_{creator_id}"
-                btn = [[InlineKeyboardButton("Не добавлять", callback_data=cancel_data)]]
+                btn = [[InlineKeyboardButton(tr("Не добавлять", locale), callback_data=cancel_data)]]
                 reply_markup = InlineKeyboardMarkup(btn)
                 await bot.send_message(chat_id=user, text=text, reply_markup=reply_markup)
 
@@ -787,6 +802,7 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
     user = update.effective_chat
     tg_user = TgUser.model_validate(user)
     db_user = await db_controller.save_update_user(tg_user=tg_user)
+    locale = await resolve_user_locale(user.id, platform="tg", preferred_language_code=tg_user.language_code)
     logger.info(f"*** DB user: {db_user}")
     # user_id = update.effective_chat.id
     data = query.data
@@ -802,7 +818,12 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         from handlers.cal import build_day_view  # local import to avoid circular dependency
 
         text, reply_markup = await build_day_view(
-            user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
+            user_id=user.id,
+            year=year,
+            month=month,
+            day=day,
+            tz_name=db_user.time_zone,
+            locale=locale,
         )
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
         return
@@ -825,7 +846,7 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         ]
         delete_row = []
         if events:
-            delete_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
+            delete_row.append(InlineKeyboardButton(tr("🗑 Удалить событие", locale), callback_data=f"delete_event_{year}_{month}_{day}"))
         reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row] + [delete_row])
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
         return
@@ -840,7 +861,12 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         from handlers.cal import build_day_view  # local import to avoid circular dependency
 
         text, reply_markup = await build_day_view(
-            user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
+            user_id=user.id,
+            year=year,
+            month=month,
+            day=day,
+            tz_name=db_user.time_zone,
+            locale=locale,
         )
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
         return
@@ -863,26 +889,32 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         ]
         delete_row = []
         if events:
-            delete_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
+            delete_row.append(InlineKeyboardButton(tr("🗑 Удалить событие", locale), callback_data=f"delete_event_{year}_{month}_{day}"))
         reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row] + [delete_row])
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif "_recurrent_" in data:
         _, _, _, db_id, year, month, day = data.split("_")
+        formatted_date = format_localized_date(
+            date(int(year), int(month), int(day)),
+            locale=locale,
+            fmt="d MMMM y",
+        )
 
-        formatted_date = f"{day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года"
-
-        text = f"Событие повторяющееся. \nОтмените событие на дату {formatted_date} или удалите его полностью"
+        text = tr(
+            "Событие повторяющееся.\nОтмените событие на дату {formatted_date} или удалите его полностью",
+            locale,
+        ).format(formatted_date=formatted_date)
         reply_markup = InlineKeyboardMarkup(
             [
                 [
                     InlineKeyboardButton(
-                        f"🗑 Удалить на дату {day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года",
+                        tr("🗑 Удалить на дату {date}", locale).format(date=formatted_date),
                         callback_data=f"delete_event_recurDay_{db_id}_{year}_{month}_{day}",
                     )
                 ],
-                [InlineKeyboardButton("🗑 Удалить полностью", callback_data=f"delete_event_id_{db_id}_{year}_{month}_{day}")],
-                [InlineKeyboardButton("Отмена", callback_data=f"cal_select_{year}_{month}_{day}")],
+                [InlineKeyboardButton(tr("🗑 Удалить полностью", locale), callback_data=f"delete_event_id_{db_id}_{year}_{month}_{day}")],
+                [InlineKeyboardButton(tr("Отмена", locale), callback_data=f"cal_select_{year}_{month}_{day}")],
             ]
         )
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
@@ -906,9 +938,9 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
         events = await db_controller.get_current_day_events_by_user(
             user_id=user.id, month=month, year=year, day=day, deleted=True, tz_name=db_user.time_zone
         )
-        formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
-        text = f"<b>{formatted_date}</b>\nВыберете события для удаления:"
-        reply_markup = _build_delete_events_markup(events, selected_ids, year, month, day)
+        formatted_date = format_localized_date(date(year, month, day), locale=locale, fmt="d MMMM y")
+        text = f"<b>{formatted_date}</b>\n{tr('Выберете события для удаления:', locale)}"
+        reply_markup = _build_delete_events_markup(events, selected_ids, year, month, day, locale=locale)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif data.startswith("delete_event_confirm_"):
@@ -924,7 +956,14 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
 
         from handlers.cal import build_day_view  # local import to avoid circular dependency
 
-        text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
+        text, reply_markup = await build_day_view(
+            user_id=user.id,
+            year=year,
+            month=month,
+            day=day,
+            tz_name=db_user.time_zone,
+            locale=locale,
+        )
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     else:  # конструктор событий для удаления
@@ -938,9 +977,9 @@ async def handle_delete_event_callback(update: Update, context: ContextTypes.DEF
             user_id=user.id, month=month, year=year, day=day, deleted=True, tz_name=db_user.time_zone
         )
 
-        formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
-        text = f"<b>{formatted_date}</b>\nВыберете события для удаления:"
-        reply_markup = _build_delete_events_markup(events, set(), year, month, day)
+        formatted_date = format_localized_date(date(year, month, day), locale=locale, fmt="d MMMM y")
+        text = f"<b>{formatted_date}</b>\n{tr('Выберете события для удаления:', locale)}"
+        reply_markup = _build_delete_events_markup(events, set(), year, month, day, locale=locale)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
 
@@ -952,6 +991,7 @@ async def handle_event_participants_callback(update: Update, context: ContextTyp
     user = update.effective_chat
     tg_user = TgUser.model_validate(user)
     db_user = await db_controller.save_update_user(tg_user=tg_user)
+    locale = await resolve_user_locale(user.id, platform="tg", preferred_language_code=tg_user.language_code)
     logger.info(f"*** DB user: {db_user}")
 
     if "cancel" in data:
@@ -965,11 +1005,14 @@ async def handle_event_participants_callback(update: Update, context: ContextTyp
                 creator_id = None
 
         _, event_info = await db_controller.delete_event_by_id(event_id=event_id, tz_name=db_user.time_zone)
-        await query.edit_message_text(text="Событие не добавлено в календарь.")
+        await query.edit_message_text(text=tr("Событие не добавлено в календарь.", locale))
 
         if creator_id and update.effective_chat and creator_id != update.effective_chat.id:
-            user_name = update.effective_chat.full_name or update.effective_chat.first_name or "Участник"
-            text = f"Участник {user_name} отказался от участия в событии: {event_info}"
+            user_name = update.effective_chat.full_name or update.effective_chat.first_name or tr("Участник", locale)
+            text = tr("Участник {user_name} отказался от участия в событии: {event_info}", locale).format(
+                user_name=user_name,
+                event_info=event_info,
+            )
             try:
                 await context.bot.send_message(chat_id=creator_id, text=text)
             except Exception:  # noqa: BLE001
@@ -982,6 +1025,7 @@ async def handle_reschedule_event_callback(update: Update, context: ContextTypes
 
     query = update.callback_query
     await query.answer()
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="tg")
 
     parts = query.data.split("_")
     if len(parts) < 4:
@@ -994,16 +1038,16 @@ async def handle_reschedule_event_callback(update: Update, context: ContextTypes
     shift_days = 0
     if action == "hour":
         shift_hours = 1
-        human = "на 1 час"
+        human = tr("на 1 час", locale)
     elif action == "day":
         shift_days = 1
-        human = "на завтра"
+        human = tr("на завтра", locale)
     else:
         return
 
     new_event_id = await db_controller.reschedule_event(event_id=event_id, shift_hours=shift_hours, shift_days=shift_days)
     if not new_event_id:
-        await query.edit_message_text(text="Не удалось перенести событие.")
+        await query.edit_message_text(text=tr("Не удалось перенести событие.", locale))
         return
 
-    await query.edit_message_text(text=f"Событие перенесено {human}.")
+    await query.edit_message_text(text=tr("Событие перенесено {human}.", locale).format(human=human))

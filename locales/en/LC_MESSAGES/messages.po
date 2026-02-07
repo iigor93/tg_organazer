@@ -160,6 +160,9 @@ msgstr "Start *"
 msgid "Окончание"
 msgstr "End"
 
+msgid "Описание *"
+msgstr "Description *"
+
 msgid "Повтор"
 msgstr "Repeat"
 
@@ -247,8 +250,23 @@ msgstr "🗑 Delete"
 msgid "🗑 Удалить полностью"
 msgstr "🗑 Delete entirely"
 
+msgid "🗑 Удалить на дату {date}"
+msgstr "🗑 Delete on {date}"
+
+msgid "Событие повторяющееся.\nОтмените событие на дату {formatted_date} или удалите его полностью"
+msgstr "This is a recurring event.\nCancel it on {formatted_date} or delete it entirely"
+
 msgid "Событие не добавлено в календарь."
 msgstr "Event was not added to the calendar."
+
+msgid "Не добавлять"
+msgstr "Do not add"
+
+msgid "Участник"
+msgstr "Participant"
+
+msgid "Участник {user_name} отказался от участия в событии: {event_info}"
+msgstr "Participant {user_name} declined the event: {event_info}"
 
 msgid "Не удалось перенести событие."
 msgstr "Failed to reschedule the event."
@@ -258,6 +276,9 @@ msgstr "by 1 hour"
 
 msgid "на завтра"
 msgstr "to tomorrow"
+
+msgid "Событие перенесено {human}."
+msgstr "Event rescheduled {human}."
 
 msgid "Перенести на 1 час"
 msgstr "Postpone by 1 hour"
