@@ -9,6 +9,27 @@ from entities import MaxUser
 logger = logging.getLogger(__name__)
 
 
+def _normalize_participants(participants: dict[int, str] | dict[str, str] | None) -> dict[int, str]:
+    normalized: dict[int, str] = {}
+    for raw_user_id, name in (participants or {}).items():
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError):
+            continue
+        normalized[user_id] = name
+    return normalized
+
+
+def _normalize_selected(selected: list[int] | list[str] | set[int] | set[str] | None) -> set[int]:
+    normalized: set[int] = set()
+    for raw_user_id in (selected or []):
+        try:
+            normalized.add(int(raw_user_id))
+        except (TypeError, ValueError):
+            continue
+    return normalized
+
+
 def _build_team_keyboard(participants: dict[int, str], selected: set[int]) -> InlineKeyboardMarkup:
     buttons = []
     for tg_id, name in participants.items():
@@ -34,7 +55,7 @@ async def handle_team_command(update: MaxUpdate, context: MaxContext) -> None:
     context.chat_data.pop("time_input_prompt_chat_id", None)
     user_id = update.effective_chat.id
 
-    participants = await db_controller.get_participants(tg_id=user_id, include_inactive=True, platform="max")
+    participants = _normalize_participants(await db_controller.get_participants(tg_id=user_id, include_inactive=True, platform="max"))
     message = update.message or (update.callback_query.message if update.callback_query else None)
     if not participants:
         text = "У вас нет участников."
@@ -65,12 +86,12 @@ async def handle_team_callback(update: MaxUpdate, context: MaxContext) -> None:
     user_id = update.effective_chat.id
     data = query.data
 
-    participants = (
+    participants = _normalize_participants(
         context.chat_data.get("team_participants")
         or await db_controller.get_participants(tg_id=user_id, include_inactive=True, platform="max")
         or {}
     )
-    selected = set(context.chat_data.get("team_selected") or [])
+    selected = _normalize_selected(context.chat_data.get("team_selected"))
 
     if data.startswith("team_toggle_"):
         _, _, tg_id_str = data.split("_")
@@ -98,7 +119,9 @@ async def handle_team_callback(update: MaxUpdate, context: MaxContext) -> None:
             related_tg_ids=list(selected),
             platform="max",
         )
-        participants = await db_controller.get_participants(tg_id=user_id, include_inactive=True, platform="max") or {}
+        participants = _normalize_participants(
+            await db_controller.get_participants(tg_id=user_id, include_inactive=True, platform="max") or {}
+        )
         context.chat_data["team_participants"] = participants
         context.chat_data["team_selected"] = []
 
@@ -178,9 +201,9 @@ async def handle_contact(update: MaxUpdate, context: MaxContext) -> None:
 
         event = context.chat_data.get("event")
         if event:
-            participants = await db_controller.get_participants(
+            participants = _normalize_participants(await db_controller.get_participants(
                 tg_id=update.effective_chat.id, include_inactive=True, platform="max"
-            ) or {}
+            ) or {})
             event.all_user_participants = participants
             context.chat_data["event"] = event
 

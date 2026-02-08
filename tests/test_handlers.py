@@ -8,7 +8,7 @@ from telegram import InlineKeyboardMarkup, ReplyKeyboardMarkup
 from database.db_controller import db_controller
 from entities import Event, TgUser
 from handlers.cal import handle_calendar_callback, show_calendar
-from handlers.contacts import handle_contact
+from handlers.contacts import handle_contact, handle_team_callback
 from handlers.events import handle_create_event_callback, handle_delete_event_callback, show_upcoming_events
 from handlers.start import start
 from tests.fakes import DummyMessage, make_update_with_callback, make_update_with_message
@@ -152,3 +152,18 @@ async def test_show_upcoming_events(db_session_fixture):
     await show_upcoming_events(update, context=context)
 
     assert update.message.replies
+
+
+@pytest.mark.asyncio
+async def test_team_toggle_with_string_participant_id_marks_selected():
+    update = make_update_with_callback(data="team_toggle_2", user_id=1)
+    data: dict = {"team_participants": {"2": "Bob"}, "team_selected": []}
+    context = type("DummyContext", (), {"user_data": data, "chat_data": data})()
+
+    await handle_team_callback(update, context)
+
+    assert set(context.chat_data.get("team_selected", [])) == {2}
+    assert update.callback_query.markup_edits
+    markup = update.callback_query.markup_edits[0]["reply_markup"]
+    button_texts = [button.text for row in markup.inline_keyboard for button in row]
+    assert "Bob ❌" in button_texts

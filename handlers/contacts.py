@@ -10,6 +10,27 @@ from i18n import resolve_user_locale, tr
 logger = logging.getLogger(__name__)
 
 
+def _normalize_participants(participants: dict[int, str] | dict[str, str] | None) -> dict[int, str]:
+    normalized: dict[int, str] = {}
+    for raw_tg_id, name in (participants or {}).items():
+        try:
+            tg_id = int(raw_tg_id)
+        except (TypeError, ValueError):
+            continue
+        normalized[tg_id] = name
+    return normalized
+
+
+def _normalize_selected(selected: list[int] | list[str] | set[int] | set[str] | None) -> set[int]:
+    normalized: set[int] = set()
+    for raw_tg_id in (selected or []):
+        try:
+            normalized.add(int(raw_tg_id))
+        except (TypeError, ValueError):
+            continue
+    return normalized
+
+
 def _build_team_keyboard(participants: dict[int, str], selected: set[int], locale: str | None = None) -> InlineKeyboardMarkup:
     buttons = []
     for tg_id, name in participants.items():
@@ -36,7 +57,7 @@ async def handle_team_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_id = update.effective_chat.id
     locale = await resolve_user_locale(user_id, platform="tg")
 
-    participants = await db_controller.get_participants(tg_id=user_id, include_inactive=True)
+    participants = _normalize_participants(await db_controller.get_participants(tg_id=user_id, include_inactive=True))
     if not participants:
         await update.message.reply_text(tr("У вас нет привязанных участников.", locale))
         return
@@ -60,10 +81,10 @@ async def handle_team_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     locale = await resolve_user_locale(user_id, platform="tg")
     data = query.data
 
-    participants = (
+    participants = _normalize_participants(
         context.chat_data.get("team_participants") or await db_controller.get_participants(tg_id=user_id, include_inactive=True) or {}
     )
-    selected = set(context.chat_data.get("team_selected") or [])
+    selected = _normalize_selected(context.chat_data.get("team_selected"))
 
     if data.startswith("team_toggle_"):
         _, _, tg_id_str = data.split("_")
@@ -87,7 +108,7 @@ async def handle_team_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             return
 
         deleted = await db_controller.delete_participants(current_tg_id=user_id, related_tg_ids=list(selected))
-        participants = await db_controller.get_participants(tg_id=user_id, include_inactive=True) or {}
+        participants = _normalize_participants(await db_controller.get_participants(tg_id=user_id, include_inactive=True) or {})
         context.chat_data["team_participants"] = participants
         context.chat_data["team_selected"] = []
 
@@ -152,7 +173,9 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         event = context.chat_data.get("event")
         if event:
-            participants = await db_controller.get_participants(tg_id=update.effective_chat.id, include_inactive=True) or {}
+            participants = _normalize_participants(
+                await db_controller.get_participants(tg_id=update.effective_chat.id, include_inactive=True) or {}
+            )
             event.all_user_participants = participants
             context.chat_data["event"] = event
 
