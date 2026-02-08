@@ -5,10 +5,9 @@ from datetime import date, time
 from max_bot.compat import InlineKeyboardButton, InlineKeyboardMarkup
 from max_bot.context import MaxContext, MaxUpdate
 
-from config import MONTH_NAMES
 from database.db_controller import db_controller
 from entities import Event, Recurrent, MaxUser
-from i18n import resolve_user_locale, tr
+from i18n import format_localized_date, resolve_user_locale, tr
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +84,7 @@ def _build_delete_events_markup(
     year: int,
     month: int,
     day: int,
+    locale: str | None = None,
 ) -> InlineKeyboardMarkup:
     list_btn = []
     for ev_text, ev_id, is_single in events:
@@ -99,14 +99,14 @@ def _build_delete_events_markup(
         list_btn.append([InlineKeyboardButton(btn_text, callback_data=callback_data)])
 
     if selected_ids:
-        list_btn.append([InlineKeyboardButton("🗑 Удалить", callback_data=f"delete_event_confirm_{year}_{month}_{day}")])
+        list_btn.append([InlineKeyboardButton(tr("🗑 Удалить", locale), callback_data=f"delete_event_confirm_{year}_{month}_{day}")])
     else:
-        list_btn.append([InlineKeyboardButton("Отмена", callback_data=f"cal_select_{year}_{month}_{day}")])
+        list_btn.append([InlineKeyboardButton(tr("Отмена", locale), callback_data=f"cal_select_{year}_{month}_{day}")])
 
     return InlineKeyboardMarkup(list_btn)
 
 
-def build_emoji_keyboard() -> InlineKeyboardMarkup:
+def build_emoji_keyboard(locale: str | None = None) -> InlineKeyboardMarkup:
     keyboard = []
     row = []
     for idx, emoji in enumerate(EMOJI_OPTIONS):
@@ -116,12 +116,12 @@ def build_emoji_keyboard() -> InlineKeyboardMarkup:
             row = []
     if row:
         keyboard.append(row)
-    keyboard.append([InlineKeyboardButton("Без эмодзи", callback_data="emoji_clear")])
+    keyboard.append([InlineKeyboardButton(tr("Без эмодзи", locale), callback_data="emoji_clear")])
     return InlineKeyboardMarkup(keyboard)
 
 
-def format_description(description: str | None) -> str:
-    return description or "Описание *"
+def format_description(description: str | None, locale: str | None = None) -> str:
+    return description or tr("Описание *", locale)
 
 
 
@@ -152,6 +152,7 @@ def generate_time_selector(hours: int = 12, minutes: int = 0, time_type: str = "
 
 async def handle_participants_callback(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("handle_participants_callback")
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="max")
 
     query = update.callback_query
     await query.answer()
@@ -173,7 +174,7 @@ async def handle_participants_callback(update: MaxUpdate, context: MaxContext) -
     for tg_id, name in event.all_user_participants.items():
         is_active = context.chat_data.get("participants_status", {}).get(tg_id, True)
         if not is_active:
-            name = f"{name} (не в боте)"
+            name = f"{name} ({tr('не в боте', locale)})"
         elif tg_id in event.participants:
             name = f"{name} ✅"
         list_btn.append([InlineKeyboardButton(name, callback_data=f"participants_{tg_id}")])
@@ -181,12 +182,13 @@ async def handle_participants_callback(update: MaxUpdate, context: MaxContext) -
     list_btn.append([InlineKeyboardButton("✅ OK", callback_data="create_event_begin_")])
 
     reply_markup = InlineKeyboardMarkup(list_btn)
-    await query.edit_message_text(text="Добавь пользователя, нажми скрепку", reply_markup=reply_markup)
+    await query.edit_message_text(text=tr("Добавь пользователя, нажми скрепку", locale), reply_markup=reply_markup)
 
 
 
 async def handle_emoji_callback(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("handle_emoji_callback")
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="max")
 
     query = update.callback_query
     await query.answer()
@@ -197,7 +199,7 @@ async def handle_emoji_callback(update: MaxUpdate, context: MaxContext) -> None:
 
     data = query.data
     if data == "emoji_open":
-        await query.edit_message_text(text="Выберите эмодзи:", reply_markup=build_emoji_keyboard())
+        await query.edit_message_text(text=tr("Выберите эмодзи:", locale), reply_markup=build_emoji_keyboard(locale))
         return
 
     if data.startswith("emoji_set_"):
@@ -218,6 +220,7 @@ async def handle_emoji_callback(update: MaxUpdate, context: MaxContext) -> None:
         year=year,
         month=month,
         day=day,
+        locale=locale,
         has_participants=has_participants,
         show_details=bool(context.chat_data.get("edit_event_id")),
         show_back_btn=show_back_btn,
@@ -228,6 +231,7 @@ async def handle_emoji_callback(update: MaxUpdate, context: MaxContext) -> None:
 
 async def handle_time_callback(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("handle_time_callback")
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="max")
 
     query = update.callback_query
     await query.answer()
@@ -245,11 +249,11 @@ async def handle_time_callback(update: MaxUpdate, context: MaxContext) -> None:
     if data.startswith("time_hour_set_"):
         _, _, _, time_type = data.split("_")
         if query.message:
-            message = await query.message.reply_text(text="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0447\u0430\u0441\u044b (0-23):", include_menu=False)
+            message = await query.message.reply_text(text=tr("Введите часы (0-23):", locale), include_menu=False)
         else:
             message = await context.bot.send_message(
                 user_id=update.effective_chat.id,
-                text="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0447\u0430\u0441\u044b (0-23):",
+                text=tr("Введите часы (0-23):", locale),
                 include_menu=False,
             )
         context.chat_data["await_time_input"] = {
@@ -267,11 +271,11 @@ async def handle_time_callback(update: MaxUpdate, context: MaxContext) -> None:
     if data.startswith("time_minute_set_"):
         _, _, _, time_type = data.split("_")
         if query.message:
-            message = await query.message.reply_text(text="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043c\u0438\u043d\u0443\u0442\u044b (0-59):", include_menu=False)
+            message = await query.message.reply_text(text=tr("Введите минуты (0-59):", locale), include_menu=False)
         else:
             message = await context.bot.send_message(
                 user_id=update.effective_chat.id,
-                text="\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043c\u0438\u043d\u0443\u0442\u044b (0-59):",
+                text=tr("Введите минуты (0-59):", locale),
                 include_menu=False,
             )
         context.chat_data["await_time_input"] = {
@@ -331,17 +335,18 @@ def get_event_constructor(
     year: int | None = None,
     month: int | None = None,
     day: int | None = None,
+    locale: str | None = None,
     has_participants: bool = False,
     show_details: bool = False,
     show_back_btn: bool = False,
     back_callback_data: str | None = None,
     read_only: bool = False,
 ):
-    start_time = "Начало *"
-    stop_time = "Окончание"
-    description = "Описание *"
-    recurrent = "Повтор"
-    participants = "Участники"
+    start_time = tr("Начало *", locale)
+    stop_time = tr("Окончание", locale)
+    description = tr("Описание *", locale)
+    recurrent = tr("Повтор", locale)
+    participants = tr("Участники", locale)
     show_create_btn = False
 
     if event:
@@ -350,9 +355,9 @@ def get_event_constructor(
 
         start_time = event.start_time.strftime("%H:%M") if event.start_time else start_time
         stop_time = event.stop_time.strftime("%H:%M") if event.stop_time else stop_time
-        description = format_description(event.description)
+        description = format_description(event.description, locale)
         description = description[:20] + "..." if len(str(description)) > 20 else description
-        recurrent = f"{recurrent}: {event.recurrent.get_name()}"
+        recurrent = f"{recurrent}: {event.recurrent.get_name(locale)}"
         len_participants = len(event.participants) if event.participants else None
         if len_participants:
             participants += f" ({len_participants})"
@@ -361,13 +366,13 @@ def get_event_constructor(
             if not event.stop_time or event.stop_time >= event.start_time:
                 show_create_btn = True
 
-    formatted_date = f"{day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года"
+    formatted_date = format_localized_date(date(int(year), int(month), int(day)), locale=locale, fmt="d MMMM y")
     if show_details:
-        date_text = f"{day} {MONTH_NAMES[int(month) - 1].lower()} {year}"
+        date_text = format_localized_date(date(int(year), int(month), int(day)), locale=locale, fmt="d MMMM y")
         start_text = event.start_time.strftime("%H:%M") if event.start_time else "—"
         stop_text = event.stop_time.strftime("%H:%M") if event.stop_time else ""
         description_text = event.description if event.description else "—"
-        recurrent_text = event.recurrent.get_name() if event.recurrent else "—"
+        recurrent_text = event.recurrent.get_name(locale) if event.recurrent else "—"
         participant_names = []
         if event.participants:
             participant_names = [event.all_user_participants.get(tg_id, str(tg_id)) for tg_id in event.participants]
@@ -375,36 +380,36 @@ def get_event_constructor(
         creator_name = "—"
         if event.creator_max_id:
             creator_name = event.all_user_participants.get(event.creator_max_id, str(event.creator_max_id))
-        description_text = format_description(description_text)
+        description_text = format_description(description_text, locale)
         text = (
-            "📅 Дата: " + date_text + "\n"
-            "⏰ Начало: " + start_text + "\n"
-            "⏳ Окончание: " + stop_text + "\n"
-            "📝 Описание: " + description_text + "\n"
-            "🔁 Повтор: " + recurrent_text + "\n"
-            "👤 Создатель: " + creator_name + "\n"
-            "👥 Участники: " + participants_text + "\n\n"
-            "* - поля обязательные для заполнения"
+            tr("📅 Дата: {value}", locale).format(value=date_text) + "\n"
+            + tr("⏰ Начало: {value}", locale).format(value=start_text) + "\n"
+            + tr("⏳ Окончание: {value}", locale).format(value=stop_text) + "\n"
+            + tr("📝 Описание: {value}", locale).format(value=description_text) + "\n"
+            + tr("🔁 Повтор: {value}", locale).format(value=recurrent_text) + "\n"
+            + tr("👤 Создатель: {value}", locale).format(value=creator_name) + "\n"
+            + tr("👥 Участники: {value}", locale).format(value=participants_text) + "\n\n"
+            + tr("* - поля обязательные для заполнения", locale)
         )
     else:
-        text = f"✍️ Создать событие на <b>{formatted_date}</b> \n\n* - поля обязательные для заполнения"
+        text = tr("✍️ Создать событие на <b>{date}</b> \n\n* - поля обязательные для заполнения", locale).format(date=formatted_date)
     if read_only:
         return text, None
 
     start_btn = InlineKeyboardButton(text=start_time, callback_data=f"create_event_start_{year}_{month}_{day}")
     stop_btn = InlineKeyboardButton(text=stop_time, callback_data=f"create_event_stop_{year}_{month}_{day}")
     description_btn = InlineKeyboardButton(text=description, callback_data=f"create_event_description_{year}_{month}_{day}")
-    emoji_btn = InlineKeyboardButton(text=(event.emoji if event and event.emoji else "Эмодзи"), callback_data="emoji_open")
+    emoji_btn = InlineKeyboardButton(text=(event.emoji if event and event.emoji else tr("Эмодзи", locale)), callback_data="emoji_open")
     recurrent_btn = InlineKeyboardButton(text=recurrent, callback_data=f"create_event_recurrent_{year}_{month}_{day}")
     participants_btn = InlineKeyboardButton(text=participants, callback_data=f"create_event_participants_{year}_{month}_{day}")
     buttons = [[start_btn, stop_btn], [emoji_btn], [description_btn], [recurrent_btn], [participants_btn]]
 
     if show_create_btn:
-        create_btn = InlineKeyboardButton(text="💾 Сохранить событие", callback_data="create_event_save_to_db")
+        create_btn = InlineKeyboardButton(text=tr("💾 Сохранить событие", locale), callback_data="create_event_save_to_db")
         buttons.append([create_btn])
     if show_back_btn:
         callback_data = back_callback_data or "create_event_back_"
-        back_btn = InlineKeyboardButton(text="\u21a9\u041d\u0430\u0437\u0430\u0434", callback_data=callback_data)
+        back_btn = InlineKeyboardButton(text=tr("↩ Вернуться в календарь", locale), callback_data=callback_data)
         buttons.append([back_btn])
 
     reply_markup = InlineKeyboardMarkup(buttons)
@@ -419,6 +424,7 @@ async def start_event_creation(
     month: int,
     day: int,
 ) -> None:
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="max")
     context.chat_data.pop("team_participants", None)
     context.chat_data.pop("team_selected", None)
     context.chat_data.pop("participants_status", None)
@@ -454,6 +460,7 @@ async def start_event_creation(
         year=year,
         month=month,
         day=day,
+        locale=locale,
         has_participants=has_participants,
         show_details=bool(context.chat_data.get("edit_event_id")),
         show_back_btn=True,
@@ -471,6 +478,7 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
     user = update.effective_chat
     tg_user = MaxUser.model_validate(user)
     db_user = await db_controller.save_update_max_user(max_user=tg_user)
+    locale = await resolve_user_locale(user.id, platform="max", preferred_language_code=tg_user.language_code)
     logger.info(f"*** DB user: {db_user}")
 
     event: Event | None = context.chat_data.get("event")
@@ -481,7 +489,7 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
         event.creator_max_id = update.effective_chat.id
         context.chat_data["event"] = event
     if context.chat_data.get("edit_event_readonly") and not data.startswith("create_event_back_"):
-        await query.answer("Только просмотр", show_alert=False)
+        await query.answer(tr("Только просмотр", locale), show_alert=False)
         return
 
     year, month, day = event.get_date()
@@ -511,6 +519,7 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
                 year=year,
                 month=month,
                 day=day,
+                locale=locale,
                 has_participants=has_participants,
                 show_details=bool(context.chat_data.get("edit_event_id")),
                 show_back_btn=show_back_btn,
@@ -530,10 +539,10 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
 
         reply_markup = generate_time_selector(hours=int(hours), minutes=int(minutes), time_type="start")
 
-        await query.edit_message_text(text="Укажите время начала события", reply_markup=reply_markup)
+        await query.edit_message_text(text=tr("Укажите время начала события", locale), reply_markup=reply_markup)
 
     elif data.startswith("create_event_stop_"):
-        text = "Укажите время окончания события"
+        text = tr("Укажите время окончания события", locale)
         hours = 12
         minutes = 0
         if event and event.stop_time:
@@ -546,7 +555,7 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
             minutes = int(minutes)
             event.stop_time = datetime.datetime.strptime(f"{hours:02d}:{minutes:02d}", "%H:%M").time()
             context.chat_data["event"] = event
-            text += f"\n\n (Время начала события: {hours:02d}:{minutes:02d})"
+            text += tr("\n\n (Время начала события: {time})", locale).format(time=f"{hours:02d}:{minutes:02d}")
         elif event and not event.stop_time:
             event.stop_time = datetime.datetime.strptime("12:00", "%H:%M").time()
             context.chat_data["event"] = event
@@ -559,13 +568,13 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
         prompt_message_id = None
         prompt_chat_id = None
         if query.message:
-            message = await query.message.reply_text(text="Опиши, что будет в событии:", include_menu=False)
+            message = await query.message.reply_text(text=tr("Опиши, что будет в событии:", locale), include_menu=False)
             prompt_message_id = message.message_id
             prompt_chat_id = message.chat_id
         elif update.effective_chat:
             message = await context.bot.send_message(
                 user_id=update.effective_chat.id,
-                text="Опиши, что будет в событии:",
+                text=tr("Опиши, что будет в событии:", locale),
                 include_menu=False,
             )
             prompt_message_id = message.message_id
@@ -589,6 +598,7 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
             year=year,
             month=month,
             day=day,
+            locale=locale,
             has_participants=has_participants,
             show_details=bool(context.chat_data.get("edit_event_id")),
             show_back_btn=show_back_btn,
@@ -598,11 +608,11 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
 
     elif data.startswith("create_event_recurrent_"):
         list_btn = []
-        for item in Recurrent.get_all_names():
+        for item in Recurrent.get_all_names(locale):
             list_btn.append([InlineKeyboardButton(item[0], callback_data=f"create_event_save_recurrent_{item[1]}")])
 
         reply_markup = InlineKeyboardMarkup(list_btn)
-        await query.edit_message_text(text="Как часто повторять событие:", reply_markup=reply_markup)
+        await query.edit_message_text(text=tr("Как часто повторять событие:", locale), reply_markup=reply_markup)
 
     elif data.startswith("create_event_participants_"):
         list_btn = []
@@ -610,7 +620,7 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
             for tg_id, name in event.all_user_participants.items():
                 is_active = context.chat_data.get("participants_status", {}).get(tg_id, True)
                 if not is_active:
-                    name = f"{name} (не в боте)"
+                    name = f"{name} ({tr('не в боте', locale)})"
                 elif tg_id in event.participants:
                     name = f"{name} ✅"
                 list_btn.append([InlineKeyboardButton(name, callback_data=f"participants_{tg_id}")])
@@ -619,7 +629,7 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
 
         reply_markup = InlineKeyboardMarkup(list_btn)
         await query.edit_message_text(
-            text="Добавь пользователя: нажми 📎скрепку ➡️ 👤Контакт ➡️ выбери участника события ➡️ Отправить контакт",
+            text=tr("Добавь пользователя: нажми 📎скрепку ➡️ 👤Контакт ➡️ выбери участника события ➡️ Отправить контакт", locale),
             reply_markup=reply_markup,
         )
     elif data.startswith("create_event_back_"):
@@ -644,7 +654,14 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
 
         from max_bot.handlers.cal import build_day_view  # local import to avoid circular dependency
 
-        text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
+        text, reply_markup = await build_day_view(
+            user_id=user.id,
+            year=year,
+            month=month,
+            day=day,
+            tz_name=db_user.time_zone,
+            locale=locale,
+        )
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif data.startswith("create_event_save_to_db"):
@@ -679,7 +696,14 @@ async def handle_create_event_callback(update: MaxUpdate, context: MaxContext) -
         year, month, day = event.get_date()
         from max_bot.handlers.cal import build_day_view  # local import to avoid circular dependency
 
-        text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
+        text, reply_markup = await build_day_view(
+            user_id=user.id,
+            year=year,
+            month=month,
+            day=day,
+            tz_name=db_user.time_zone,
+            locale=locale,
+        )
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
         if event.participants:
@@ -727,6 +751,7 @@ async def handle_edit_event_callback(update: MaxUpdate, context: MaxContext) -> 
     user = update.effective_chat
     tg_user = MaxUser.model_validate(user)
     db_user = await db_controller.save_update_max_user(max_user=tg_user)
+    locale = await resolve_user_locale(user.id, platform="max", preferred_language_code=tg_user.language_code)
     logger.info(f"*** DB user: {db_user}")
 
     parts = query.data.split("_")
@@ -734,7 +759,7 @@ async def handle_edit_event_callback(update: MaxUpdate, context: MaxContext) -> 
 
     event = await db_controller.get_event_by_id(event_id=event_id, tz_name=db_user.time_zone)
     if not event:
-        await query.edit_message_text(text="Событие не найдено")
+        await query.edit_message_text(text=tr("Событие не найдено", locale))
         return
 
     event.participants = await db_controller.get_event_participants(event_id=event_id, platform="max")
@@ -761,12 +786,13 @@ async def handle_edit_event_callback(update: MaxUpdate, context: MaxContext) -> 
             year=year,
             month=month,
             day=day,
+            locale=locale,
             has_participants=has_participants,
             show_details=True,
             read_only=True,
         )
         reply_markup = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("↩ Вернуться в календарь", callback_data=f"create_event_back_{year}_{month}_{day}")]]
+            [[InlineKeyboardButton(tr("↩ Вернуться в календарь", locale), callback_data=f"create_event_back_{year}_{month}_{day}")]]
         )
     else:
         context.chat_data.pop("edit_event_readonly", None)
@@ -776,6 +802,7 @@ async def handle_edit_event_callback(update: MaxUpdate, context: MaxContext) -> 
             year=year,
             month=month,
             day=day,
+            locale=locale,
             has_participants=has_participants,
             show_details=bool(context.chat_data.get("edit_event_id")),
             show_back_btn=show_back_btn,
@@ -790,12 +817,13 @@ async def show_upcoming_events(update: MaxUpdate, context: MaxContext) -> None:
     user = update.effective_chat
     tg_user = MaxUser.model_validate(user)
     db_user = await db_controller.save_update_max_user(max_user=tg_user)
+    locale = await resolve_user_locale(user.id, platform="max", preferred_language_code=tg_user.language_code)
     logger.info(f"*** DB user: {db_user}")
 
     events = await db_controller.get_nearest_events(user_id=user.id, tz_name=db_user.time_zone, platform="max")
 
     if events:
-        list_events = ["Ближайшие события:"]
+        list_events = [tr("Ближайшие события:", locale)]
         for _event in events:
             event_dt = list(_event.keys())[0]
             value = list(_event.values())[0]
@@ -807,7 +835,7 @@ async def show_upcoming_events(update: MaxUpdate, context: MaxContext) -> None:
             list_events.append(f"<b>{date_part}{emoji_part} {time_part}</b> - {description}")
         text = "\n".join(list_events)
     else:
-        text = "Ближайшие события не найдены"
+        text = tr("Ближайшие события не найдены", locale)
 
     message = update.message or (update.callback_query.message if update.callback_query else None)
     if message:
@@ -824,6 +852,7 @@ async def handle_delete_event_callback(update: MaxUpdate, context: MaxContext) -
     user = update.effective_chat
     tg_user = MaxUser.model_validate(user)
     db_user = await db_controller.save_update_max_user(max_user=tg_user)
+    locale = await resolve_user_locale(user.id, platform="max", preferred_language_code=tg_user.language_code)
     logger.info(f"*** DB user: {db_user}")
     # user_id = update.effective_chat.id
     data = query.data
@@ -839,31 +868,13 @@ async def handle_delete_event_callback(update: MaxUpdate, context: MaxContext) -
         from max_bot.handlers.cal import build_day_view  # local import to avoid circular dependency
 
         text, reply_markup = await build_day_view(
-            user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
+            user_id=user.id,
+            year=year,
+            month=month,
+            day=day,
+            tz_name=db_user.time_zone,
+            locale=locale,
         )
-        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
-        return
-        formatted_date = f"{day:02d}.{month:02d}.{year}"
-
-        header = "Удалено одно событие"
-        no_events = "Нет событий"
-
-        if events:
-            text = f"{header}\n\n<b>{formatted_date}</b>\n{events}"
-        else:
-            text = f"{header}\n\n<b>{formatted_date}</b>\n{no_events}"
-
-        from max_bot.handlers.cal import generate_calendar  # local import to avoid circular dependency
-
-        calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        action_row = [
-            InlineKeyboardButton(
-            )
-        ]
-        delete_row = []
-        if events:
-            delete_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
-        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row] + [delete_row])
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
         return
 
@@ -877,49 +888,37 @@ async def handle_delete_event_callback(update: MaxUpdate, context: MaxContext) -
         from max_bot.handlers.cal import build_day_view  # local import to avoid circular dependency
 
         text, reply_markup = await build_day_view(
-            user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone
+            user_id=user.id,
+            year=year,
+            month=month,
+            day=day,
+            tz_name=db_user.time_zone,
+            locale=locale,
         )
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
         return
-        formatted_date = f"{day:02d}.{month:02d}.{year}"
-
-        header = "Удалено одно событие"
-        no_events = "Нет событий"
-
-        if events:
-            text = f"{header}\n\n<b>{formatted_date}</b>\n{events}"
-        else:
-            text = f"{header}\n\n<b>{formatted_date}</b>\n{no_events}"
-
-        from max_bot.handlers.cal import generate_calendar  # local import to avoid circular dependency
-
-        calendar_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone)
-        action_row = [
-            InlineKeyboardButton(
-            )
-        ]
-        delete_row = []
-        if events:
-            delete_row.append(InlineKeyboardButton("🗑 Удалить событие", callback_data=f"delete_event_{year}_{month}_{day}"))
-        reply_markup = InlineKeyboardMarkup(list(calendar_markup.inline_keyboard) + [action_row] + [delete_row])
-        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif "_recurrent_" in data:
         _, _, _, db_id, year, month, day = data.split("_")
-
-        formatted_date = f"{day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года"
-
-        text = f"Событие повторяющееся. \nОтмените событие на дату {formatted_date} или удалите его полностью"
+        formatted_date = format_localized_date(
+            date(int(year), int(month), int(day)),
+            locale=locale,
+            fmt="d MMMM y",
+        )
+        text = tr(
+            "Событие повторяющееся.\nОтмените событие на дату {formatted_date} или удалите его полностью",
+            locale,
+        ).format(formatted_date=formatted_date)
         reply_markup = InlineKeyboardMarkup(
             [
                 [
                     InlineKeyboardButton(
-                        f"🗑 Удалить на дату {day} {(MONTH_NAMES[int(month) - 1]).title()} {year} года",
+                        tr("🗑 Удалить на дату {date}", locale).format(date=formatted_date),
                         callback_data=f"delete_event_recurDay_{db_id}_{year}_{month}_{day}",
                     )
                 ],
-                [InlineKeyboardButton("🗑 Удалить полностью", callback_data=f"delete_event_id_{db_id}_{year}_{month}_{day}")],
-                [InlineKeyboardButton("Отмена", callback_data=f"cal_select_{year}_{month}_{day}")],
+                [InlineKeyboardButton(tr("🗑 Удалить полностью", locale), callback_data=f"delete_event_id_{db_id}_{year}_{month}_{day}")],
+                [InlineKeyboardButton(tr("Отмена", locale), callback_data=f"cal_select_{year}_{month}_{day}")],
             ]
         )
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
@@ -943,9 +942,9 @@ async def handle_delete_event_callback(update: MaxUpdate, context: MaxContext) -
         events = await db_controller.get_current_day_events_by_user(
             user_id=user.id, month=month, year=year, day=day, deleted=True, tz_name=db_user.time_zone, platform="max"
         )
-        formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
-        text = f"<b>{formatted_date}</b>\nВыберете события для удаления:"
-        reply_markup = _build_delete_events_markup(events, selected_ids, year, month, day)
+        formatted_date = format_localized_date(date(year, month, day), locale=locale, fmt="d MMMM y")
+        text = f"<b>{formatted_date}</b>\n{tr('Выберете события для удаления:', locale)}"
+        reply_markup = _build_delete_events_markup(events, selected_ids, year, month, day, locale=locale)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif data.startswith("delete_event_confirm_"):
@@ -961,7 +960,14 @@ async def handle_delete_event_callback(update: MaxUpdate, context: MaxContext) -
 
         from max_bot.handlers.cal import build_day_view  # local import to avoid circular dependency
 
-        text, reply_markup = await build_day_view(user_id=user.id, year=year, month=month, day=day, tz_name=db_user.time_zone)
+        text, reply_markup = await build_day_view(
+            user_id=user.id,
+            year=year,
+            month=month,
+            day=day,
+            tz_name=db_user.time_zone,
+            locale=locale,
+        )
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     else:  # конструктор событий для удаления
@@ -975,9 +981,9 @@ async def handle_delete_event_callback(update: MaxUpdate, context: MaxContext) -
             user_id=user.id, month=month, year=year, day=day, deleted=True, tz_name=db_user.time_zone, platform="max"
         )
 
-        formatted_date = f"{day} {(MONTH_NAMES[month - 1]).title()} {year} года"
-        text = f"<b>{formatted_date}</b>\nВыберете события для удаления:"
-        reply_markup = _build_delete_events_markup(events, set(), year, month, day)
+        formatted_date = format_localized_date(date(year, month, day), locale=locale, fmt="d MMMM y")
+        text = f"<b>{formatted_date}</b>\n{tr('Выберете события для удаления:', locale)}"
+        reply_markup = _build_delete_events_markup(events, set(), year, month, day, locale=locale)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
 
@@ -1043,6 +1049,7 @@ async def handle_reschedule_event_callback(update: MaxUpdate, context: MaxContex
 
     query = update.callback_query
     await query.answer()
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="max")
 
     parts = query.data.split("_")
     if len(parts) < 4:
@@ -1055,16 +1062,16 @@ async def handle_reschedule_event_callback(update: MaxUpdate, context: MaxContex
     shift_days = 0
     if action == "hour":
         shift_hours = 1
-        human = "на 1 час"
+        human = tr("на 1 час", locale)
     elif action == "day":
         shift_days = 1
-        human = "на завтра"
+        human = tr("на завтра", locale)
     else:
         return
 
     new_event_id = await db_controller.reschedule_event(event_id=event_id, shift_hours=shift_hours, shift_days=shift_days)
     if not new_event_id:
-        await query.edit_message_text(text="Не удалось перенести событие.")
+        await query.edit_message_text(text=tr("Не удалось перенести событие.", locale))
         return
 
-    await query.edit_message_text(text=f"Событие перенесено {human}.")
+    await query.edit_message_text(text=tr("Событие перенесено {human}.", locale).format(human=human))

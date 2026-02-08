@@ -229,6 +229,7 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
             year=year,
             month=month,
             day=day,
+            locale=locale,
             has_participants=has_participants,
             show_details=bool(context.chat_data.get("edit_event_id")),
             show_back_btn=show_back_btn,
@@ -271,22 +272,22 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
     if await_tg_link:
         raw_value = (update.message.text or "").strip()
         if not raw_value.isdigit():
-            await update.message.reply_text("Отправьте числовой Telegram ID.")
+            await update.message.reply_text(tr("Отправьте числовой Telegram ID.", locale))
             return
         tg_id = int(raw_value)
         max_id = update.effective_chat.id
         try:
             await _send_tg_link_request(tg_id=tg_id, max_id=max_id)
             await update.message.reply_text(
-                "Запрос отправлен в Telegram. Подтвердите в Telegram боте."
+                tr("Запрос отправлен в Telegram. Подтвердите в Telegram боте.", locale)
             )
             context.chat_data.pop("await_tg_link", None)
         except Exception:  # noqa: BLE001
             logger.exception("Failed to send Telegram link request")
-            await update.message.reply_text("Не удалось отправить запрос в Telegram.")
+            await update.message.reply_text(tr("Не удалось отправить запрос в Telegram.", locale))
         return
 
-    await update.message.reply_text("Unknown command.")
+    await update.message.reply_text(tr("Используйте кнопки для навигации.", locale))
 
 
 async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
@@ -301,7 +302,7 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
                     "text": menu_message.text or "",
                     "attachments": _sanitize_attachments(menu_message.attachments),
                 }
-            await update.callback_query.edit_message_text("Меню:", reply_markup=build_menu_markup())
+            await update.callback_query.edit_message_text(tr("Меню:", locale), reply_markup=build_menu_markup())
         elif data == "menu_back":
             state = context.chat_data.pop("menu_back", None)
             menu_message = update.callback_query.message
@@ -321,11 +322,11 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
         elif data == "menu_team":
             await handle_team_command(update, context)
         elif data == "menu_my_id":
-            await update.callback_query.message.reply_text(f"Ваш ID: {update.effective_chat.id}")
+            await update.callback_query.message.reply_text(tr("Ваш ID: {user_id}", locale).format(user_id=update.effective_chat.id))
         elif data == "menu_link_tg":
             context.chat_data["await_tg_link"] = True
             await update.callback_query.message.reply_text(
-                "Для синхронизации событий с Telegram ботом FamPlanner_bot пришлите свой telegram ID.",
+                tr("Для синхронизации событий с Telegram ботом FamPlanner_bot пришлите свой telegram ID.", locale),
                 include_menu=False,
             )
         elif data == "menu_help":
@@ -371,15 +372,17 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
     elif text.startswith("/language"):
         parts = text.split(maxsplit=1)
         if len(parts) < 2:
-            await update.message.reply_text("Use: /language ru|en")
+            await update.message.reply_text(tr("Use: /language ru|en", locale))
         else:
             selected = normalize_locale(parts[1], default="")
             if selected not in {"ru", "en"}:
-                await update.message.reply_text("Use: /language ru|en")
+                await update.message.reply_text(tr("Use: /language ru|en", locale))
             else:
                 await db_controller.set_user_language(user_id=update.effective_chat.id, language_code=selected, platform="max")
                 context.chat_data["locale"] = selected
-                await update.message.reply_text("Язык переключен на русский." if selected == "ru" else "Language switched to English.")
+                await update.message.reply_text(
+                    tr("Язык переключен на русский.", selected) if selected == "ru" else tr("Language switched to English.", selected)
+                )
     elif text.startswith("/help"):
         await handle_help(update, context)
     elif text.startswith("/team"):
@@ -387,9 +390,9 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
     elif text.startswith("/calendar") or text.startswith("/show_calendar"):
         await show_calendar(update, context)
     elif text.startswith("/show_my_id") or text.startswith("/my_id"):
-        await update.message.reply_text(f"Ваш ID: {update.effective_chat.id}")
+        await update.message.reply_text(tr("Ваш ID: {user_id}", locale).format(user_id=update.effective_chat.id))
     elif normalized in MENU_TEXT_ALIASES:
-        await update.message.reply_text("Меню:", reply_markup=build_menu_markup())
+        await update.message.reply_text(tr("Меню:", locale), reply_markup=build_menu_markup())
     elif normalized in MENU_CALENDAR_ALIASES:
         await show_calendar(update, context)
     elif normalized in MENU_UPCOMING_ALIASES:
@@ -397,11 +400,11 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
     elif normalized in MENU_TEAM_ALIASES:
         await handle_team_command(update, context)
     elif normalized in MENU_MY_ID_ALIASES:
-        await update.message.reply_text(f"Ваш ID: {update.effective_chat.id}")
+        await update.message.reply_text(tr("Ваш ID: {user_id}", locale).format(user_id=update.effective_chat.id))
     elif normalized in MENU_LINK_TG_ALIASES:
         context.chat_data["await_tg_link"] = True
         await update.message.reply_text(
-            "Для синхронизации событий с Telegram ботом FamPlanner_bot пришлите свой telegram ID."
+            tr("Для синхронизации событий с Telegram ботом FamPlanner_bot пришлите свой telegram ID.", locale)
         )
     elif normalized in MENU_HELP_ALIASES:
         await handle_help(update, context)
