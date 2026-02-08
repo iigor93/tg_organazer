@@ -313,6 +313,12 @@ msgstr "All participants deleted."
 msgid "Управление участниками закрыто."
 msgstr "Participant management closed."
 
+msgid "Удалено: {count}. Выберите следующих участников."
+msgstr "Deleted: {count}. Choose the next participants."
+
+msgid "Удалено: {count}. Выберите новых участников."
+msgstr "Deleted: {count}. Choose new participants."
+
 msgid "Похоже этот номер не зарегистрирован в телеграмм!"
 msgstr "This phone number is not registered in Telegram."
 

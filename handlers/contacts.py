@@ -5,18 +5,19 @@ from telegram.ext import ContextTypes
 
 from database.db_controller import db_controller
 from entities import TgUser
+from i18n import resolve_user_locale, tr
 
 logger = logging.getLogger(__name__)
 
 
-def _build_team_keyboard(participants: dict[int, str], selected: set[int]) -> InlineKeyboardMarkup:
+def _build_team_keyboard(participants: dict[int, str], selected: set[int], locale: str | None = None) -> InlineKeyboardMarkup:
     buttons = []
     for tg_id, name in participants.items():
         postfix = " ❌" if tg_id in selected else ""
         buttons.append([InlineKeyboardButton(f"{name}{postfix}", callback_data=f"team_toggle_{tg_id}")])
 
-    buttons.append([InlineKeyboardButton("Удалить выбранных", callback_data="team_delete")])
-    buttons.append([InlineKeyboardButton("Закрыть", callback_data="team_close")])
+    buttons.append([InlineKeyboardButton(tr("Удалить выбранных", locale), callback_data="team_delete")])
+    buttons.append([InlineKeyboardButton(tr("Закрыть", locale), callback_data="team_close")])
 
     return InlineKeyboardMarkup(buttons)
 
@@ -33,18 +34,19 @@ async def handle_team_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     context.chat_data.pop("time_input_prompt_message_id", None)
     context.chat_data.pop("time_input_prompt_chat_id", None)
     user_id = update.effective_chat.id
+    locale = await resolve_user_locale(user_id, platform="tg")
 
     participants = await db_controller.get_participants(tg_id=user_id, include_inactive=True)
     if not participants:
-        await update.message.reply_text("У вас нет привязанных участников.")
+        await update.message.reply_text(tr("У вас нет привязанных участников.", locale))
         return
 
     context.chat_data["team_participants"] = participants
     context.chat_data["team_selected"] = []
 
-    reply_markup = _build_team_keyboard(participants, set())
+    reply_markup = _build_team_keyboard(participants, set(), locale=locale)
     await update.message.reply_text(
-        "Список привязанных участников. Выберите лишних и нажмите удалить.",
+        tr("Список привязанных участников. Выберите лишних и нажмите удалить.", locale),
         reply_markup=reply_markup,
     )
 
@@ -55,6 +57,7 @@ async def handle_team_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
 
     user_id = update.effective_chat.id
+    locale = await resolve_user_locale(user_id, platform="tg")
     data = query.data
 
     participants = (
@@ -71,15 +74,15 @@ async def handle_team_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             selected.add(tg_id)
 
         context.chat_data["team_selected"] = list(selected)
-        reply_markup = _build_team_keyboard(participants, selected)
+        reply_markup = _build_team_keyboard(participants, selected, locale=locale)
         await query.edit_message_reply_markup(reply_markup=reply_markup)
         return
 
     if data == "team_delete":
         if not selected:
             await query.edit_message_text(
-                "Выберите участников для удаления.",
-                reply_markup=_build_team_keyboard(participants, selected),
+                tr("Выберите участников для удаления.", locale),
+                reply_markup=_build_team_keyboard(participants, selected, locale=locale),
             )
             return
 
@@ -89,12 +92,12 @@ async def handle_team_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         context.chat_data["team_selected"] = []
 
         if not participants:
-            await query.edit_message_text("Все участники удалены.")
+            await query.edit_message_text(tr("Все участники удалены.", locale))
             return
 
-        reply_markup = _build_team_keyboard(participants, set())
+        reply_markup = _build_team_keyboard(participants, set(), locale=locale)
         await query.edit_message_text(
-            f"Удалено: {deleted}. Выберите следующих участников.",
+            tr("Удалено: {count}. Выберите следующих участников.", locale).format(count=deleted),
             reply_markup=reply_markup,
         )
         return
@@ -102,7 +105,7 @@ async def handle_team_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     if data == "team_close":
         context.chat_data.pop("team_participants", None)
         context.chat_data.pop("team_selected", None)
-        await query.edit_message_text("Управление участниками закрыто.")
+        await query.edit_message_text(tr("Управление участниками закрыто.", locale))
         return
 
 
