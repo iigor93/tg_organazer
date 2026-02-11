@@ -13,6 +13,7 @@ English version: `README.md`.
 - Список ближайших событий.
 - Отдельный скрипт напоминаний (`cron_handler.py`).
 - Редактирование конструктора события в одном сообщении без лишнего спама.
+- Встроенная локализация через Babel (`ru`/`en`) для Telegram-бота и `max_bot`.
 
 ## Технологии
 - Python 3.12
@@ -69,6 +70,8 @@ python -m venv .venv
 ```powershell
 python -m pip install .
 ```
+
+Файлы переводов находятся в `locales/<lang>/LC_MESSAGES/messages.po`.
 
 ## Подготовка базы данных
 Примените миграции:

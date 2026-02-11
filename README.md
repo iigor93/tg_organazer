@@ -13,6 +13,7 @@ Telegram bot for personal events and reminders with calendar UI, participants, a
 - Upcoming events list.
 - Background reminder sender (`cron_handler.py`).
 - Inline edits of the event constructor message to reduce chat noise.
+- Built-in i18n with Babel (`ru`/`en`) for Telegram bot and `max_bot`.
 
 ## Tech stack
 - Python 3.12
@@ -69,6 +70,8 @@ Install dependencies from `pyproject.toml`:
 ```powershell
 python -m pip install .
 ```
+
+Localization assets are stored in `locales/<lang>/LC_MESSAGES/messages.po`.
 
 ## Database setup
 Run migrations:

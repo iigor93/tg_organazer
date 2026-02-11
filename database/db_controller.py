@@ -14,12 +14,30 @@ from database.models.event_models import CanceledEvent, DbEvent, EventParticipan
 from database.models.user_model import User as DB_User
 from database.models.user_model import UserRelation
 from database.session import AsyncSessionLocal
-from entities import Event, Recurrent, TgUser
+from entities import Event, MaxUser, Recurrent, TgUser
 
 logger = logging.getLogger(__name__)
 
 
 class DBController:
+    @staticmethod
+    def _normalize_platform(platform: str | None) -> str:
+        return "max" if platform == "max" else "tg"
+
+    @classmethod
+    def _user_id_column(cls, platform: str | None):
+        platform = cls._normalize_platform(platform)
+        return DB_User.max_id if platform == "max" else DB_User.tg_id
+
+    @classmethod
+    def _event_user_column(cls, platform: str | None):
+        platform = cls._normalize_platform(platform)
+        return DbEvent.max_id if platform == "max" else DbEvent.tg_id
+
+    @classmethod
+    def _participant_id_column(cls, platform: str | None):
+        platform = cls._normalize_platform(platform)
+        return EventParticipant.participant_max_id if platform == "max" else EventParticipant.participant_tg_id
     @staticmethod
     def get_effective_month_day(year: int, month: int, day: int) -> int:
         _, num_days = monthrange(year, month)
@@ -39,6 +57,8 @@ class DBController:
                 session.add(user)
             else:
                 tg_user_dict = tg_user.model_dump(exclude={"title"}, exclude_defaults=True, exclude_unset=True)
+                if tg_user_dict.get("language_code") is None:
+                    tg_user_dict.pop("language_code", None)
                 if from_contact:
                     tg_user_dict.pop("is_active", None)
                 else:
@@ -69,23 +89,217 @@ class DBController:
         return TgUser.model_validate(user)
 
     @staticmethod
-    async def get_user(tg_id: int) -> TgUser | None:
+    async def save_update_max_user(max_user: MaxUser, from_contact: bool = False, current_user: int | None = None) -> None | MaxUser:
+        logger.info(f"db_controller save max: {max_user}")
         async with AsyncSessionLocal() as session:
-            user = (await session.execute(select(DB_User).where(DB_User.tg_id == tg_id))).scalar_one_or_none()
+            query = select(DB_User).where(DB_User.max_id == max_user.max_id)
+            result = (await session.execute(query)).scalar_one_or_none()
+
+            if not result:
+                max_user_dict = max_user.model_dump(exclude={"title"}, exclude_defaults=True, exclude_unset=True)
+                user = DB_User(**max_user_dict)
+                user.is_active = False if from_contact else True
+                session.add(user)
+            else:
+                max_user_dict = max_user.model_dump(exclude={"title"}, exclude_defaults=True, exclude_unset=True)
+                if max_user_dict.get("language_code") is None:
+                    max_user_dict.pop("language_code", None)
+                if from_contact:
+                    max_user_dict.pop("is_active", None)
+                else:
+                    max_user_dict["is_active"] = True
+                update_query = update(DB_User).where(DB_User.max_id == max_user.max_id).values(**max_user_dict).returning(DB_User)
+                user = (await session.execute(update_query)).scalar_one_or_none()
+
+            await session.commit()
+            await session.refresh(user)
+
+            if from_contact and current_user:
+                current_user_query = select(DB_User).where(DB_User.max_id == current_user)
+                current_user = (await session.execute(current_user_query)).scalar_one_or_none()
+
+                new_user_relation = UserRelation(
+                    user_id=current_user.id,
+                    related_user_id=user.id,
+                )
+                session.add(new_user_relation)
+
+                try:
+                    await session.commit()
+                except IntegrityError:
+                    return None
+
+        user.id = user.max_id
+        user.time_zone = config.DEFAULT_TIMEZONE_NAME if not user.time_zone else user.time_zone
+        return MaxUser.model_validate(user)
+
+    @staticmethod
+    async def get_user(tg_id: int, platform: str | None = None) -> TgUser | MaxUser | None:
+        user_col = DBController._user_id_column(platform)
+        user_attr = user_col.key
+        async with AsyncSessionLocal() as session:
+            user = (await session.execute(select(DB_User).where(user_col == tg_id))).scalar_one_or_none()
             if not user:
                 return None
 
-            user.id = user.tg_id
+            user.id = getattr(user, user_attr)
             user.time_zone = config.DEFAULT_TIMEZONE_NAME if not user.time_zone else user.time_zone
+            if platform == "max":
+                return MaxUser.model_validate(user)
             return TgUser.model_validate(user)
 
     @staticmethod
-    async def get_users_short_names(tg_ids: list[int]) -> dict[int, str]:
+    async def set_user_language(user_id: int, language_code: str, platform: str | None = None) -> None:
+        user_col = DBController._user_id_column(platform)
+        async with AsyncSessionLocal() as session:
+            existing_user = (await session.execute(select(DB_User).where(user_col == user_id))).scalar_one_or_none()
+            if existing_user:
+                await session.execute(update(DB_User).where(user_col == user_id).values(language_code=language_code))
+            else:
+                user_kwargs = {user_col.key: user_id, "language_code": language_code}
+                session.add(DB_User(**user_kwargs))
+            await session.commit()
+
+    @staticmethod
+    async def get_max_user(max_id: int) -> MaxUser | None:
+        async with AsyncSessionLocal() as session:
+            user = (await session.execute(select(DB_User).where(DB_User.max_id == max_id))).scalar_one_or_none()
+            if not user:
+                return None
+
+            user.id = user.max_id
+            user.time_zone = config.DEFAULT_TIMEZONE_NAME if not user.time_zone else user.time_zone
+            return MaxUser.model_validate(user)
+
+    @staticmethod
+    async def get_linked_tg_id(max_id: int) -> int | None:
+        async with AsyncSessionLocal() as session:
+            user = (await session.execute(select(DB_User).where(DB_User.max_id == max_id))).scalar_one_or_none()
+            if not user:
+                return None
+            return user.tg_id
+
+    @staticmethod
+    async def link_tg_max(tg_id: int, max_id: int) -> tuple[bool, str]:
+        async with AsyncSessionLocal() as session:
+            tg_user = (await session.execute(select(DB_User).where(DB_User.tg_id == tg_id))).scalar_one_or_none()
+            max_user = (await session.execute(select(DB_User).where(DB_User.max_id == max_id))).scalar_one_or_none()
+
+            if tg_user and tg_user.max_id and tg_user.max_id != max_id:
+                return False, "Этот Telegram ID уже связан с другим MAX ID."
+            if max_user and max_user.tg_id and max_user.tg_id != tg_id:
+                return False, "Этот MAX ID уже связан с другим Telegram ID."
+            if tg_user and max_user and tg_user.id != max_user.id:
+                primary = tg_user
+                secondary = max_user
+
+                # Avoid unique constraint conflicts while merging.
+                await session.execute(
+                    update(DB_User)
+                    .where(DB_User.id == secondary.id)
+                    .values(tg_id=None, max_id=None)
+                )
+
+                merged_values: dict = {
+                    "tg_id": tg_id,
+                    "max_id": max_id,
+                }
+                for attr in (
+                    "username",
+                    "first_name",
+                    "last_name",
+                    "time_shift",
+                    "time_zone",
+                    "language_code",
+                    "is_active",
+                    "is_chat",
+                ):
+                    if getattr(primary, attr) is None and getattr(secondary, attr) is not None:
+                        merged_values[attr] = getattr(secondary, attr)
+
+                await session.execute(update(DB_User).where(DB_User.id == primary.id).values(**merged_values))
+
+                await session.execute(
+                    delete(UserRelation).where(
+                        UserRelation.user_id == secondary.id,
+                        UserRelation.related_user_id.in_(
+                            select(UserRelation.related_user_id).where(UserRelation.user_id == primary.id)
+                        ),
+                    )
+                )
+                await session.execute(
+                    delete(UserRelation).where(
+                        UserRelation.related_user_id == secondary.id,
+                        UserRelation.user_id.in_(
+                            select(UserRelation.user_id).where(UserRelation.related_user_id == primary.id)
+                        ),
+                    )
+                )
+                await session.execute(update(UserRelation).where(UserRelation.user_id == secondary.id).values(user_id=primary.id))
+                await session.execute(
+                    update(UserRelation).where(UserRelation.related_user_id == secondary.id).values(related_user_id=primary.id)
+                )
+
+                await session.execute(delete(DB_User).where(DB_User.id == secondary.id))
+                await session.commit()
+
+                tg_user = primary
+                max_user = primary
+
+
+            if tg_user:
+                await session.execute(update(DB_User).where(DB_User.tg_id == tg_id).values(max_id=max_id))
+            elif max_user:
+                await session.execute(update(DB_User).where(DB_User.max_id == max_id).values(tg_id=tg_id))
+            else:
+                session.add(DB_User(tg_id=tg_id, max_id=max_id))
+
+            await session.commit()
+
+            await session.execute(
+                update(DbEvent)
+                .where(DbEvent.tg_id == tg_id, DbEvent.max_id.is_(None))
+                .values(max_id=max_id)
+            )
+            await session.execute(
+                update(DbEvent)
+                .where(DbEvent.max_id == max_id, DbEvent.tg_id.is_(None))
+                .values(tg_id=tg_id)
+            )
+            await session.execute(
+                update(DbEvent)
+                .where(DbEvent.creator_tg_id == tg_id, DbEvent.creator_max_id.is_(None))
+                .values(creator_max_id=max_id)
+            )
+            await session.execute(
+                update(DbEvent)
+                .where(DbEvent.creator_max_id == max_id, DbEvent.creator_tg_id.is_(None))
+                .values(creator_tg_id=tg_id)
+            )
+            await session.execute(
+                update(EventParticipant)
+                .where(EventParticipant.participant_tg_id == tg_id, EventParticipant.participant_max_id.is_(None))
+                .values(participant_max_id=max_id)
+            )
+            await session.execute(
+                update(EventParticipant)
+                .where(EventParticipant.participant_max_id == max_id, EventParticipant.participant_tg_id.is_(None))
+                .values(participant_tg_id=tg_id)
+            )
+            await session.commit()
+
+        return True, "Связь подтверждена."
+
+    @staticmethod
+    async def get_users_short_names(tg_ids: list[int], platform: str | None = None) -> dict[int, str]:
         if not tg_ids:
             return {}
 
+        user_col = DBController._user_id_column(platform)
+        user_attr = user_col.key
+
         async with AsyncSessionLocal() as session:
-            users = (await session.execute(select(DB_User).where(DB_User.tg_id.in_(tg_ids)))).scalars().all()
+            users = (await session.execute(select(DB_User).where(user_col.in_(tg_ids)))).scalars().all()
 
         names: dict[int, str] = {}
         for user in users:
@@ -94,16 +308,18 @@ class DBController:
             elif user.username:
                 name = user.username
             else:
-                name = str(user.tg_id)
-            names[user.tg_id] = name
+                name = str(getattr(user, user_attr))
+            names[getattr(user, user_attr)] = name
 
         return names
 
     @staticmethod
-    async def get_participants(tg_id: int, include_inactive: bool = False) -> dict[int, str] | None:
+    async def get_participants(tg_id: int, include_inactive: bool = False, platform: str | None = None) -> dict[int, str] | None:
         async with AsyncSessionLocal() as session:
             db_user_alias = aliased(DB_User)
-            filters = [db_user_alias.tg_id == tg_id]
+            user_col = DBController._user_id_column(platform)
+            user_attr = user_col.key
+            filters = [getattr(db_user_alias, user_attr) == tg_id]
             if not include_inactive:
                 filters.append(DB_User.is_active.is_(True))
             query = (
@@ -115,13 +331,15 @@ class DBController:
 
             participants = (await session.execute(query)).scalars().all()
 
-            return {item.tg_id: item.first_name for item in participants}
+            return {getattr(item, user_attr): item.first_name for item in participants}
 
     @staticmethod
-    async def get_participants_with_status(tg_id: int, include_inactive: bool = True) -> dict[int, tuple[str, bool]]:
+    async def get_participants_with_status(tg_id: int, include_inactive: bool = True, platform: str | None = None) -> dict[int, tuple[str, bool]]:
         async with AsyncSessionLocal() as session:
             db_user_alias = aliased(DB_User)
-            filters = [db_user_alias.tg_id == tg_id]
+            user_col = DBController._user_id_column(platform)
+            user_attr = user_col.key
+            filters = [getattr(db_user_alias, user_attr) == tg_id]
             if not include_inactive:
                 filters.append(DB_User.is_active.is_(True))
             query = (
@@ -133,38 +351,42 @@ class DBController:
 
             participants = (await session.execute(query)).scalars().all()
 
-            return {item.tg_id: (item.first_name, bool(item.is_active)) for item in participants}
+            return {getattr(item, user_attr): (item.first_name, bool(item.is_active)) for item in participants}
 
     @staticmethod
-    async def get_event_participants(event_id: int) -> list[int]:
+    async def get_event_participants(event_id: int, platform: str | None = None) -> list[int]:
         async with AsyncSessionLocal() as session:
-            query = select(EventParticipant.participant_tg_id).where(EventParticipant.event_id == int(event_id))
+            participant_col = DBController._participant_id_column(platform)
+            query = select(participant_col).where(EventParticipant.event_id == int(event_id))
             return list((await session.execute(query)).scalars().all())
 
     @staticmethod
-    async def set_event_participants(event_id: int, participant_ids: list[int]) -> None:
+    async def set_event_participants(event_id: int, participant_ids: list[int], platform: str | None = None) -> None:
         async with AsyncSessionLocal() as session:
             await session.execute(delete(EventParticipant).where(EventParticipant.event_id == int(event_id)))
             if participant_ids:
+                participant_col = DBController._participant_id_column(platform).key
                 session.add_all(
                     [
-                        EventParticipant(event_id=int(event_id), participant_tg_id=int(participant_id))
+                        EventParticipant(event_id=int(event_id), **{participant_col: int(participant_id)})
                         for participant_id in participant_ids
                     ]
                 )
             await session.commit()
 
     @staticmethod
-    async def delete_participants(current_tg_id: int, related_tg_ids: list[int]) -> int:
+    async def delete_participants(current_tg_id: int, related_tg_ids: list[int], platform: str | None = None) -> int:
         if not related_tg_ids:
             return 0
 
         async with AsyncSessionLocal() as session:
-            current_user = (await session.execute(select(DB_User).where(DB_User.tg_id == current_tg_id))).scalar_one_or_none()
+            user_col = DBController._user_id_column(platform)
+            user_attr = user_col.key
+            current_user = (await session.execute(select(DB_User).where(user_col == current_tg_id))).scalar_one_or_none()
             if not current_user:
                 return 0
 
-            related_users = (await session.execute(select(DB_User).where(DB_User.tg_id.in_(related_tg_ids)))).scalars().all()
+            related_users = (await session.execute(select(DB_User).where(user_col.in_(related_tg_ids)))).scalars().all()
             if not related_users:
                 return 0
 
@@ -190,26 +412,71 @@ class DBController:
         if event.stop_time:
             stop_datetime_tz = datetime.combine(event.event_date, event.stop_time).replace(tzinfo=user_tz).astimezone(timezone.utc)
 
-        creator_tg_id = event.creator_tg_id if event.creator_tg_id is not None else event.tg_id
-        new_event = DbEvent(
-            description=event.description,
-            emoji=event.emoji,
-            start_time=start_datetime_tz.time(),
-            single_event=True if event.recurrent == Recurrent.never else False,
-            daily=True if event.recurrent == Recurrent.daily else False,
-            weekly=start_datetime_tz.weekday() if event.recurrent == Recurrent.weekly else None,
-            monthly=start_datetime_tz.day if event.recurrent == Recurrent.monthly else None,
-            annual_day=start_datetime_tz.day if event.recurrent == Recurrent.annual else None,
-            annual_month=start_datetime_tz.month if event.recurrent == Recurrent.annual else None,
-            tg_id=event.tg_id,
-            creator_tg_id=creator_tg_id,
-            start_at=start_datetime_tz,
-            stop_at=stop_datetime_tz,
-        )
         async with AsyncSessionLocal() as session:
+            if event.max_id and (event.tg_id is None or event.creator_tg_id is None):
+                user = (await session.execute(select(DB_User).where(DB_User.max_id == event.max_id))).scalar_one_or_none()
+                if user and user.tg_id:
+                    if event.tg_id is None:
+                        event.tg_id = user.tg_id
+                    if event.creator_tg_id is None:
+                        event.creator_tg_id = user.tg_id
+            if event.tg_id and (event.max_id is None or event.creator_max_id is None):
+                user = (await session.execute(select(DB_User).where(DB_User.tg_id == event.tg_id))).scalar_one_or_none()
+                if user and user.max_id:
+                    if event.max_id is None:
+                        event.max_id = user.max_id
+                    if event.creator_max_id is None:
+                        event.creator_max_id = user.max_id
+
+            creator_tg_id = event.creator_tg_id if event.creator_tg_id is not None else event.tg_id
+            creator_max_id = event.creator_max_id if event.creator_max_id is not None else event.max_id
+            new_event = DbEvent(
+                description=event.description,
+                emoji=event.emoji,
+                start_time=start_datetime_tz.time(),
+                single_event=True if event.recurrent == Recurrent.never else False,
+                daily=True if event.recurrent == Recurrent.daily else False,
+                weekly=start_datetime_tz.weekday() if event.recurrent == Recurrent.weekly else None,
+                monthly=start_datetime_tz.day if event.recurrent == Recurrent.monthly else None,
+                annual_day=start_datetime_tz.day if event.recurrent == Recurrent.annual else None,
+                annual_month=start_datetime_tz.month if event.recurrent == Recurrent.annual else None,
+                tg_id=event.tg_id,
+                max_id=event.max_id,
+                creator_tg_id=creator_tg_id,
+                creator_max_id=creator_max_id,
+                start_at=start_datetime_tz,
+                stop_at=stop_datetime_tz,
+            )
             session.add(new_event)
             await session.commit()
             await session.refresh(new_event)
+
+            if new_event.max_id and (new_event.tg_id is None or new_event.creator_tg_id is None):
+                user = (await session.execute(select(DB_User).where(DB_User.max_id == new_event.max_id))).scalar_one_or_none()
+                if user and user.tg_id:
+                    await session.execute(
+                        update(DbEvent)
+                        .where(DbEvent.id == new_event.id)
+                        .values(
+                            tg_id=new_event.tg_id or user.tg_id,
+                            creator_tg_id=new_event.creator_tg_id or user.tg_id,
+                        )
+                    )
+                    await session.commit()
+                    await session.refresh(new_event)
+            if new_event.tg_id and (new_event.max_id is None or new_event.creator_max_id is None):
+                user = (await session.execute(select(DB_User).where(DB_User.tg_id == new_event.tg_id))).scalar_one_or_none()
+                if user and user.max_id:
+                    await session.execute(
+                        update(DbEvent)
+                        .where(DbEvent.id == new_event.id)
+                        .values(
+                            max_id=new_event.max_id or user.max_id,
+                            creator_max_id=new_event.creator_max_id or user.max_id,
+                        )
+                    )
+                    await session.commit()
+                    await session.refresh(new_event)
 
             return new_event.id
 
@@ -245,6 +512,8 @@ class DBController:
             recurrent=recurrent,
             tg_id=db_event.tg_id,
             creator_tg_id=db_event.creator_tg_id or db_event.tg_id,
+            max_id=db_event.max_id,
+            creator_max_id=db_event.creator_max_id or db_event.max_id,
         )
 
     @staticmethod
@@ -282,7 +551,7 @@ class DBController:
         return [day for day in range(1, num_days + 1) if date(year, month, day).weekday() == weekday]
 
     async def get_current_month_events_by_user(
-        self, user_id: int, month: int, year: int, tz_name: str = config.DEFAULT_TIMEZONE_NAME
+        self, user_id: int, month: int, year: int, tz_name: str = config.DEFAULT_TIMEZONE_NAME, platform: str | None = None
     ) -> dict[int, int]:
         _, num_days = monthrange(year, month)
 
@@ -295,9 +564,10 @@ class DBController:
         month_start_utc = month_start_local.astimezone(timezone.utc)
         month_end_utc = month_end_local.astimezone(timezone.utc)
 
+        event_user_col = self._event_user_column(platform)
         async with AsyncSessionLocal() as session:
             query = select(DbEvent).where(
-                DbEvent.tg_id == user_id,
+                event_user_col == user_id,
                 DbEvent.start_at <= month_end_utc,
                 or_(
                     and_(
@@ -378,7 +648,13 @@ class DBController:
 
     @staticmethod
     async def get_current_day_events_by_user(
-        user_id: int, month: int, year: int, day: int, tz_name: str = config.DEFAULT_TIMEZONE_NAME, deleted: bool = False
+        user_id: int,
+        month: int,
+        year: int,
+        day: int,
+        tz_name: str = config.DEFAULT_TIMEZONE_NAME,
+        deleted: bool = False,
+        platform: str | None = None,
     ) -> str | list:
         user_tz = ZoneInfo(tz_name)
         pickup_date_local = date(year, month, day)
@@ -393,9 +669,10 @@ class DBController:
 
         day_start_for_monthly = 1 if day_start_utc.day > day_end_utc.day else day_start_utc.day
 
+        event_user_col = DBController._event_user_column(platform)
         async with AsyncSessionLocal() as session:
             query = select(DbEvent).where(
-                DbEvent.tg_id == user_id,
+                event_user_col == user_id,
                 DbEvent.start_at <= day_end_utc,
                 or_(
                     and_(
@@ -477,8 +754,9 @@ class DBController:
         return event_list if deleted else "\n".join(event_list)
 
     @staticmethod
-    async def delete_all_events_by_user(user_id: int) -> None:
-        query = delete(DbEvent).where(DbEvent.tg_id == user_id)
+    async def delete_all_events_by_user(user_id: int, platform: str | None = None) -> None:
+        event_user_col = DBController._event_user_column(platform)
+        query = delete(DbEvent).where(event_user_col == user_id)
         async with AsyncSessionLocal() as session:
             await session.execute(query)
             await session.commit()
@@ -500,6 +778,7 @@ class DBController:
         self,
         user_id: int,
         tz_name: str = config.DEFAULT_TIMEZONE_NAME,
+        platform: str | None = None,
     ) -> list:
         user_tz = ZoneInfo(tz_name)
 
@@ -509,11 +788,12 @@ class DBController:
         start_dt_utc = start_local.astimezone(timezone.utc)
         stop_dt_utc = stop_local.astimezone(timezone.utc)
 
+        event_user_col = self._event_user_column(platform)
         async with AsyncSessionLocal() as session:
             query = (
                 select(DbEvent)
                 .where(
-                    DbEvent.tg_id == user_id,
+                    event_user_col == user_id,
                     DbEvent.start_at <= stop_dt_utc,
                     or_(
                         and_(DbEvent.single_event.is_(True), DbEvent.start_at.between(start_dt_utc, stop_dt_utc)),
@@ -594,7 +874,13 @@ class DBController:
             await session.commit()
 
     @staticmethod
-    async def get_current_day_events_all_users(event_dt: datetime, session: AsyncSession, limit: int = 400, offset: int = 0) -> list:
+    async def get_current_day_events_all_users(
+        event_dt: datetime,
+        session: AsyncSession,
+        limit: int = 400,
+        offset: int = 0,
+        platform: str | None = None,
+    ) -> list:
         last_day = monthrange(event_dt.year, event_dt.month)[1]
         monthly_clause = DbEvent.monthly == event_dt.day
         if event_dt.day == last_day:
@@ -603,6 +889,7 @@ class DBController:
         logger.info(f"events for day from db: {event_dt}, week: {event_dt.weekday()}")
         logger.info(f"INCOME DATETIME: {event_dt}")
 
+        event_user_col = DBController._event_user_column(platform)
         query = (
             select(DbEvent)
             .where(
@@ -629,7 +916,9 @@ class DBController:
 
         result = (await session.execute(query)).scalars().all()
 
-        users_query = select(DB_User).where(DB_User.tg_id.in_([event.tg_id for event in result]))
+        user_ids = [getattr(event, event_user_col.key) for event in result]
+        user_col = DBController._user_id_column(platform)
+        users_query = select(DB_User).where(user_col.in_(user_ids))
         users = (await session.execute(users_query)).scalars().all()
 
         users_dict = {}
@@ -640,7 +929,7 @@ class DBController:
             tz = ZoneInfo(_user.time_zone) if _user.time_zone else ZoneInfo(config.DEFAULT_TIMEZONE_NAME)
             dt_aware = datetime.now(tz)
 
-            users_dict[_user.tg_id] = dt_aware.utcoffset()
+            users_dict[getattr(_user, user_col.key)] = dt_aware.utcoffset()
 
         for event in result:
             if event_dt.date() in [_ev.cancel_date for _ev in event.canceled_events]:
@@ -649,8 +938,8 @@ class DBController:
             event_list.append(
                 {
                     "event_id": event.id,
-                    "tg_id": event.tg_id,
-                    "start_time": (event.start_at + users_dict.get(event.tg_id, dt_aware_default)).time(),
+                    "tg_id": getattr(event, event_user_col.key),
+                    "start_time": (event.start_at + users_dict.get(getattr(event, event_user_col.key), dt_aware_default)).time(),
                     "description": event.description,
                 }
             )
@@ -658,7 +947,7 @@ class DBController:
         return event_list
 
     @staticmethod
-    async def resave_event_to_participant(event_id: int, user_id: int) -> int | None:
+    async def resave_event_to_participant(event_id: int, user_id: int, platform: str | None = None) -> int | None:
         async with AsyncSessionLocal() as session:
             query = select(DbEvent).where(DbEvent.id == event_id)
             event = (await session.execute(query)).scalar_one_or_none()
@@ -667,6 +956,8 @@ class DBController:
                 return None
 
             creator_tg_id = event.creator_tg_id or event.tg_id
+            creator_max_id = event.creator_max_id or event.max_id
+            event_user_col = DBController._event_user_column(platform).key
             new_event = DbEvent(
                 description=event.description,
                 emoji=event.emoji,
@@ -679,9 +970,12 @@ class DBController:
                 monthly=event.monthly,
                 annual_day=event.annual_day,
                 annual_month=event.annual_month,
-                tg_id=user_id,
+                tg_id=event.tg_id,
+                max_id=event.max_id,
                 creator_tg_id=creator_tg_id,
+                creator_max_id=creator_max_id,
             )
+            setattr(new_event, event_user_col, user_id)
 
             session.add(new_event)
             await session.commit()
@@ -712,7 +1006,9 @@ class DBController:
                 annual_day=None,
                 annual_month=None,
                 tg_id=event.tg_id,
+                max_id=event.max_id,
                 creator_tg_id=event.creator_tg_id or event.tg_id,
+                creator_max_id=event.creator_max_id or event.max_id,
             )
 
             session.add(new_event)

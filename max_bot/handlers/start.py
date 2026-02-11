@@ -2,46 +2,24 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from telegram import BotCommand, BotCommandScopeChat, KeyboardButton, Message, ReplyKeyboardMarkup, Update
-from telegram.ext import ContextTypes
+from max_bot.compat import KeyboardButton, ReplyKeyboardMarkup
+from max_bot.context import MaxContext, MaxMessage, MaxUpdate
 from timezonefinder import TimezoneFinder
 
 from database.db_controller import db_controller
-from entities import TgUser
-from handlers.cal import show_calendar
+from entities import MaxUser
 from i18n import normalize_locale, resolve_user_locale, tr
+from max_bot.handlers.cal import show_calendar
+
+SKIP_LOCATION_TEXT = "⏭ Пропустить"
+SHARE_LOCATION_TEXT = "📍 Поделиться геолокацией"
+MAIN_MENU_CALENDAR_TEXT = "📅 Показать календарь"
+MAIN_MENU_UPCOMING_TEXT = "🗓 Ближайшие события"
 
 logger = logging.getLogger(__name__)
 
 
-def _commands_for_locale(locale: str) -> list[BotCommand]:
-    if locale == "en":
-        return [
-            BotCommand("start", "Start bot"),
-            BotCommand("my_id", "Show my Telegram ID"),
-            BotCommand("team", "Manage participants"),
-            BotCommand("help", "Help"),
-            BotCommand("language", "Change language"),
-        ]
-    return [
-        BotCommand("start", "Запустить бота"),
-        BotCommand("my_id", "Показать мой Telegram ID"),
-        BotCommand("team", "Управление участниками"),
-        BotCommand("help", "Помощь"),
-        BotCommand("language", "Сменить язык"),
-    ]
-
-
-async def _set_chat_commands(context: ContextTypes.DEFAULT_TYPE, chat_id: int, locale: str) -> None:
-    if not getattr(context, "bot", None):
-        return
-    await context.bot.set_my_commands(
-        _commands_for_locale(locale),
-        scope=BotCommandScopeChat(chat_id=chat_id),
-    )
-
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("start")
     context.chat_data.pop("team_participants", None)
     context.chat_data.pop("team_selected", None)
@@ -54,22 +32,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.chat_data.pop("time_input_prompt_chat_id", None)
 
     user = update.effective_chat
-    tg_user = TgUser.model_validate(user)
-    db_user = await db_controller.save_update_user(tg_user=tg_user)
-    db_locale_raw = getattr(db_user, "language_code", None)
-    db_locale = normalize_locale(db_locale_raw, default="") if db_locale_raw else ""
-    locale = db_locale
-    if not locale:
-        locale = normalize_locale(getattr(update.effective_user, "language_code", None))
-        await db_controller.set_user_language(user_id=user.id, language_code=locale, platform="tg")
-    await _set_chat_commands(context, user.id, locale)
+    tg_user = MaxUser.model_validate(user)
+    db_user = await db_controller.save_update_max_user(max_user=tg_user)
+    locale = await resolve_user_locale(user.id, platform="max", preferred_language_code=tg_user.language_code)
+    await db_controller.set_user_language(user_id=user.id, language_code=normalize_locale(locale), platform="max")
 
     logger.info(f"*** DB user: {db_user}")
 
-    keyboard = [[KeyboardButton(tr("⏭ Пропустить", locale))]]
+    keyboard = [[KeyboardButton(SKIP_LOCATION_TEXT)]]
 
-    if getattr(update.effective_chat, "type", "private") == "private":
-        keyboard.insert(0, [KeyboardButton(tr("📍 Поделиться геолокацией", locale), request_location=True)])
+    if update.effective_chat.type == "private":
+        keyboard.insert(0, [KeyboardButton(SHARE_LOCATION_TEXT, request_location=True)])
 
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
@@ -79,10 +52,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             locale,
         ).format(name=user.first_name),
         reply_markup=reply_markup,
+        include_menu=False,
     )
 
 
-async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_help(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("handle_help")
     context.chat_data.pop("team_participants", None)
     context.chat_data.pop("team_selected", None)
@@ -93,7 +67,6 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     context.chat_data.pop("await_time_input", None)
     context.chat_data.pop("time_input_prompt_message_id", None)
     context.chat_data.pop("time_input_prompt_chat_id", None)
-    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="tg")
     text = (
         "👋 Привет! Я помогу планировать дела и напоминать о событиях.\n\n"
         "📌 Основные команды:\n"
@@ -116,89 +89,67 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         "В календаре выбери дату и нажми «Удалить событие».\n\n"
         "Если что-то не работает — просто напиши @FamPlanner, помогу разобраться 😊"
     )
-    await update.message.reply_text(text=tr(text, locale))
+    await update.message.reply_text(text=text)
 
 
-async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_location(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("handle_location")
 
     location = update.message.location
+    lat = location.get("latitude") if isinstance(location, dict) else None
+    lng = location.get("longitude") if isinstance(location, dict) else None
 
     user = update.effective_chat
-    tg_user = TgUser.model_validate(user)
-    db_user = await db_controller.save_update_user(tg_user=tg_user)
+    tg_user = MaxUser.model_validate(user)
+    db_user = await db_controller.save_update_max_user(max_user=tg_user)
     logger.info(f"*** DB user: {db_user}")
 
     logger.info(
-        f"Пользователь {user.id} ({user.first_name}) поделился геолокацией: " f"широта={location.latitude}, долгота={location.longitude}"
+        f"Location update from {user.id} ({user.first_name}): lat={lat}, lng={lng}"
     )
-    tf = TimezoneFinder()
+    if lat is None or lng is None:
+        await update.message.reply_text("Could not read location. Please try again.")
+        return
 
-    tz_name = tf.timezone_at(lat=location.latitude, lng=location.longitude)
+    tf = TimezoneFinder()
+    tz_name = tf.timezone_at(lat=lat, lng=lng)
     logger.info(f"tz name; {tz_name}")
     try:
         now = datetime.now(ZoneInfo(tz_name))
         offset = now.utcoffset()
 
         tg_user.time_zone = tz_name
-        await db_controller.save_update_user(tg_user=tg_user)
+        await db_controller.save_update_max_user(max_user=tg_user)
         logger.info(f"OFFSET: {offset}, {int(offset.total_seconds()/3600)}, {type(offset)}")
     except:  # noqa
-        logger.exception("OFFSET ERR: ")
+        logger.exception("OFFSET ERR: " )
         pass
 
-    await show_main_menu_keyboard(update.message)
     await show_calendar(update, context)
 
 
-async def handle_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_skip(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("handle_skip")
 
     user = update.effective_user
     logger.info(f"Пользователь {user.id} ({user.first_name}) пропустил геолокацию")
 
-    await show_main_menu_keyboard(update.message)
     await show_calendar(update, context)
 
 
-async def show_main_menu_keyboard(message: Message) -> None:
-    locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="tg")
-    keyboard = [[tr("📅 Показать календарь", locale)], [tr("🗓 Ближайшие события", locale)]]
+async def show_main_menu_keyboard(message: MaxMessage) -> None:
+    locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="max")
+    keyboard = [[KeyboardButton(MAIN_MENU_CALENDAR_TEXT)], [KeyboardButton(MAIN_MENU_UPCOMING_TEXT)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
     await message.reply_text(tr("Меню:", locale), reply_markup=reply_markup)
 
 
-async def show_main_menu(message: Message, add_text: str | None = None) -> None:
+async def show_main_menu(message: MaxMessage, add_text: str | None = None) -> None:
     logger.info("show_main_menu")
 
-    locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="tg")
-    keyboard = [[tr("📅 Показать календарь", locale)], [tr("🗓 Ближайшие события", locale)]]
+    locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="max")
+    keyboard = [[KeyboardButton(MAIN_MENU_CALENDAR_TEXT)], [KeyboardButton(MAIN_MENU_UPCOMING_TEXT)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
     text = f"{add_text}\n\n{tr('Выберите действие:', locale)}" if add_text else tr("Выберите действие:", locale)
 
     await message.reply_text(text=text, reply_markup=reply_markup)
-
-
-async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.message or not update.effective_chat:
-        return
-
-    args = getattr(context, "args", None) or []
-    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="tg")
-    if not args:
-        await update.message.reply_text(tr("Use: /language ru|en", locale))
-        return
-
-    selected = normalize_locale(args[0], default="")
-    if selected not in {"ru", "en"}:
-        await update.message.reply_text(tr("Use: /language ru|en", locale))
-        return
-
-    await db_controller.set_user_language(user_id=update.effective_chat.id, language_code=selected, platform="tg")
-    context.chat_data["locale"] = selected
-    await _set_chat_commands(context, update.effective_chat.id, selected)
-    if selected == "ru":
-        await update.message.reply_text(tr("Язык переключен на русский.", selected))
-    else:
-        await update.message.reply_text(tr("Language switched to English.", selected))
-    await show_main_menu_keyboard(update.message)

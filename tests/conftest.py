@@ -36,4 +36,5 @@ async def db_session_fixture(tmp_path, monkeypatch) -> AsyncGenerator[async_sess
 
 @pytest.fixture
 def context():
-    return type("DummyContext", (), {"user_data": {}})()
+    data: dict = {}
+    return type("DummyContext", (), {"user_data": data, "chat_data": data})()

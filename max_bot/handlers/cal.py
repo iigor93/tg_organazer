@@ -3,16 +3,16 @@ from calendar import monthrange
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.error import BadRequest
-from telegram.ext import ContextTypes
+from max_bot.compat import InlineKeyboardButton, InlineKeyboardMarkup
+from max_bot.context import MaxContext, MaxUpdate
 
 import config
 from database.db_controller import db_controller
-from entities import TgUser
+from entities import MaxUser
 from i18n import format_localized_date, month_year_label, resolve_user_locale, tr, weekday_labels
 
 logger = logging.getLogger(__name__)
+EMPTY_DAY_TEXT = "."
 
 
 def to_superscript(number: int) -> str:
@@ -27,7 +27,7 @@ async def generate_calendar(
     tz_name: str = config.DEFAULT_TIMEZONE_NAME,
     locale: str | None = None,
 ) -> InlineKeyboardMarkup:
-    event_dict = await db_controller.get_current_month_events_by_user(user_id=user_id, month=month, year=year, tz_name=tz_name)
+    event_dict = await db_controller.get_current_month_events_by_user(user_id=user_id, month=month, year=year, tz_name=tz_name, platform="max")
 
     first_weekday, num_days = monthrange(year, month)
 
@@ -53,7 +53,7 @@ async def generate_calendar(
     week = []
 
     for _ in range(first_weekday):
-        week.append(InlineKeyboardButton(" ", callback_data="cal_ignore"))
+        week.append(InlineKeyboardButton(EMPTY_DAY_TEXT, callback_data="cal_ignore"))
 
     for day in range(1, num_days + 1):
         number_events = event_dict.get(day)
@@ -66,7 +66,7 @@ async def generate_calendar(
 
     if week:
         for _ in range(7 - len(week)):
-            week.append(InlineKeyboardButton(" ", callback_data="cal_ignore"))
+            week.append(InlineKeyboardButton(EMPTY_DAY_TEXT, callback_data="cal_ignore"))
         keyboard.append(week)
 
     return InlineKeyboardMarkup(keyboard)
@@ -89,7 +89,7 @@ async def generate_week_calendar(
         key = (day_date.year, day_date.month)
         if key not in event_dicts:
             event_dicts[key] = await db_controller.get_current_month_events_by_user(
-                user_id=user_id, month=day_date.month, year=day_date.year, tz_name=tz_name
+                user_id=user_id, month=day_date.month, year=day_date.year, tz_name=tz_name, platform="max"
             )
 
     header = month_year_label(year=ref_date.year, month=ref_date.month, locale=locale)
@@ -120,7 +120,7 @@ async def generate_week_calendar(
     return InlineKeyboardMarkup(keyboard)
 
 
-async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def show_calendar(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("show_calendar")
 
     context.chat_data.pop("team_participants", None)
@@ -134,16 +134,22 @@ async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     context.chat_data.pop("time_input_prompt_chat_id", None)
 
     user = update.effective_chat
-    tg_user = TgUser.model_validate(user)
-    db_user = await db_controller.save_update_user(tg_user=tg_user)
-    locale = await resolve_user_locale(user.id, platform="tg", preferred_language_code=tg_user.language_code)
+    tg_user = MaxUser.model_validate(user)
+    db_user = await db_controller.save_update_max_user(max_user=tg_user)
+    locale = await resolve_user_locale(user.id, platform="max", preferred_language_code=tg_user.language_code)
     logger.info(f"*** DB user: {db_user}")
 
     # user_tz = timezone(timedelta(hours=3))
     tz_name = db_user.time_zone if db_user.time_zone else config.DEFAULT_TIMEZONE_NAME
     today = datetime.now(tz=ZoneInfo(tz_name))
 
-    reply_markup = await generate_calendar(year=today.year, month=today.month, user_id=user.id, tz_name=db_user.time_zone, locale=locale)
+    reply_markup = await generate_calendar(
+        year=today.year,
+        month=today.month,
+        user_id=user.id,
+        tz_name=db_user.time_zone,
+        locale=locale,
+    )
 
     keyboard = list(reply_markup.inline_keyboard)
     keyboard.append(
@@ -157,11 +163,21 @@ async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(
-        tr("📅 Выберите дату события:", locale),
-        reply_markup=reply_markup,
-        parse_mode="HTML",
-    )
+    message = update.message or (update.callback_query.message if update.callback_query else None)
+    text = tr("Выберите дату события:", locale)
+    if message:
+        await message.reply_text(
+            text,
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+        )
+    else:
+        await context.bot.send_message(
+            text=text,
+            user_id=user.id,
+            attachments=reply_markup.to_attachments(),
+            fmt="html",
+        )
 
 
 async def build_day_view(
@@ -172,9 +188,9 @@ async def build_day_view(
     tz_name: str,
     locale: str | None = None,
 ) -> tuple[str, InlineKeyboardMarkup]:
-    events = await db_controller.get_current_day_events_by_user(user_id=user_id, month=month, year=year, day=day, tz_name=tz_name)
+    events = await db_controller.get_current_day_events_by_user(user_id=user_id, month=month, year=year, day=day, tz_name=tz_name, platform="max")
     events_list = await db_controller.get_current_day_events_by_user(
-        user_id=user_id, month=month, year=year, day=day, tz_name=tz_name, deleted=True
+        user_id=user_id, month=month, year=year, day=day, tz_name=tz_name, deleted=True, platform="max"
     )
 
     reply_btn_create = InlineKeyboardButton(
@@ -202,21 +218,15 @@ async def build_day_view(
     return text, reply_markup
 
 
-async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_calendar_callback(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("handle_calendar_callback")
     query = update.callback_query
-    try:
-        await query.answer()
-    except BadRequest as exc:
-        if "Query is too old" in str(exc) or "query id is invalid" in str(exc):
-            logger.info("Skip expired callback query")
-        else:
-            raise
+    await query.answer()
 
     user = update.effective_chat
-    tg_user = TgUser.model_validate(user)
-    db_user = await db_controller.save_update_user(tg_user=tg_user)
-    locale = await resolve_user_locale(user.id, platform="tg", preferred_language_code=tg_user.language_code)
+    tg_user = MaxUser.model_validate(user)
+    db_user = await db_controller.save_update_max_user(max_user=tg_user)
+    locale = await resolve_user_locale(user.id, platform="max", preferred_language_code=tg_user.language_code)
     logger.info(f"*** DB user: {db_user}")
 
     data = query.data
@@ -228,7 +238,10 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
 
         # Генерируем новый календарь
         reply_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone, locale=locale)
-        await query.edit_message_text(tr("📅 Выберите дату события:", locale), reply_markup=reply_markup)
+        keyboard = list(reply_markup.inline_keyboard)
+        keyboard.append([InlineKeyboardButton(tr("Меню", locale), callback_data="menu_open")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(tr("Выберите дату события:", locale), reply_markup=reply_markup)
 
     elif data.startswith("cal_week_nav_"):
         parts = data.split("_")
@@ -244,7 +257,10 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
             tz_name=db_user.time_zone,
             locale=locale,
         )
-        await query.edit_message_text(tr("📅 Выберите дату события:", locale), reply_markup=reply_markup)
+        keyboard = list(reply_markup.inline_keyboard)
+        keyboard.append([InlineKeyboardButton(tr("Меню", locale), callback_data="menu_open")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(tr("Выберите дату события:", locale), reply_markup=reply_markup)
 
     elif data.startswith("cal_month_"):
         _, _, year_str, month_str = data.split("_")
@@ -252,7 +268,10 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
         month = int(month_str)
 
         reply_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone, locale=locale)
-        await query.edit_message_text(tr("📅 Выберите дату события:", locale), reply_markup=reply_markup)
+        keyboard = list(reply_markup.inline_keyboard)
+        keyboard.append([InlineKeyboardButton(tr("Меню", locale), callback_data="menu_open")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(tr("Выберите дату события:", locale), reply_markup=reply_markup)
 
     elif data.startswith("cal_select_"):
         logger.info("Выбор события cal_select_")
@@ -262,10 +281,10 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
         day = int(day_str)
 
         events = await db_controller.get_current_day_events_by_user(
-            user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone
+            user_id=user.id, month=month, year=year, day=day, tz_name=db_user.time_zone, platform="max"
         )
         if not events:
-            from handlers.events import start_event_creation  # local import to avoid circular dependency
+            from max_bot.handlers.events import start_event_creation  # local import to avoid circular dependency
 
             await start_event_creation(update=update, context=context, year=year, month=month, day=day)
             return

@@ -1,5 +1,6 @@
 import datetime
 import logging
+from typing import Any, Callable
 
 from dotenv import load_dotenv
 from telegram import BotCommand, Update
@@ -32,12 +33,80 @@ from handlers.events import (
     handle_time_callback,
     show_upcoming_events,
 )
-from handlers.start import handle_help, handle_location, handle_skip, start
+from handlers.link import handle_link_callback
+from handlers.start import handle_help, handle_language, handle_location, handle_skip, start
+from i18n import resolve_user_locale, tr, translate_markup
 
 load_dotenv(".env")
 
 
 logger = logging.getLogger(__name__)
+
+
+def _arg_get(args: tuple[Any, ...], kwargs: dict[str, Any], index: int, key: str) -> Any:
+    if key in kwargs:
+        return kwargs[key]
+    if len(args) > index:
+        return args[index]
+    return None
+
+
+def _arg_set(args: tuple[Any, ...], kwargs: dict[str, Any], index: int, key: str, value: Any) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    if key in kwargs:
+        kwargs[key] = value
+        return args, kwargs
+    mutable = list(args)
+    while len(mutable) <= index:
+        mutable.append(None)
+    mutable[index] = value
+    return tuple(mutable), kwargs
+
+
+def patch_telegram_bot_i18n(bot: Any) -> None:
+    if getattr(bot, "_i18n_patched", False):
+        return
+
+    original_send_message: Callable[..., Any] = bot.send_message
+    original_edit_message_text: Callable[..., Any] = bot.edit_message_text
+    original_edit_message_reply_markup: Callable[..., Any] = bot.edit_message_reply_markup
+
+    async def send_message_i18n(*args: Any, **kwargs: Any) -> Any:
+        chat_id = _arg_get(args, kwargs, 0, "chat_id")
+        locale = await resolve_user_locale(chat_id, platform="tg")
+        text = _arg_get(args, kwargs, 1, "text")
+        if isinstance(text, str):
+            args, kwargs = _arg_set(args, kwargs, 1, "text", tr(text, locale))
+        reply_markup = _arg_get(args, kwargs, 2, "reply_markup")
+        if reply_markup is not None:
+            args, kwargs = _arg_set(args, kwargs, 2, "reply_markup", translate_markup(reply_markup, locale))
+        return await original_send_message(*args, **kwargs)
+
+    async def edit_message_text_i18n(*args: Any, **kwargs: Any) -> Any:
+        text = _arg_get(args, kwargs, 0, "text")
+        chat_id = _arg_get(args, kwargs, 1, "chat_id")
+        locale = await resolve_user_locale(chat_id, platform="tg")
+        if isinstance(text, str):
+            args, kwargs = _arg_set(args, kwargs, 0, "text", tr(text, locale))
+        reply_markup = _arg_get(args, kwargs, 7, "reply_markup")
+        if reply_markup is not None:
+            args, kwargs = _arg_set(args, kwargs, 7, "reply_markup", translate_markup(reply_markup, locale))
+        return await original_edit_message_text(*args, **kwargs)
+
+    async def edit_message_reply_markup_i18n(*args: Any, **kwargs: Any) -> Any:
+        chat_id = _arg_get(args, kwargs, 0, "chat_id")
+        locale = await resolve_user_locale(chat_id, platform="tg")
+        reply_markup = _arg_get(args, kwargs, 3, "reply_markup")
+        if reply_markup is not None:
+            args, kwargs = _arg_set(args, kwargs, 3, "reply_markup", translate_markup(reply_markup, locale))
+        return await original_edit_message_reply_markup(*args, **kwargs)
+
+    try:
+        bot.send_message = send_message_i18n  # type: ignore[method-assign]
+        bot.edit_message_text = edit_message_text_i18n  # type: ignore[method-assign]
+        bot.edit_message_reply_markup = edit_message_reply_markup_i18n  # type: ignore[method-assign]
+        bot._i18n_patched = True
+    except AttributeError:
+        logger.warning("Telegram bot instance is immutable; runtime i18n patch is disabled for ExtBot.")
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -55,18 +124,19 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info("handle_text")
     logger.info(update)
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="tg")
 
     await_time_input = context.chat_data.get("await_time_input")
     if await_time_input:
         event = context.chat_data.get("event")
         if not event:
             context.chat_data.pop("await_time_input", None)
-            await update.message.reply_text("Событие не найдено. Откройте создание события заново.")
+            await update.message.reply_text(tr("Событие не найдено. Откройте создание события заново.", locale))
             return
 
         raw_value = (update.message.text or "").strip()
         if not raw_value.isdigit():
-            await update.message.reply_text("Введите число.")
+            await update.message.reply_text(tr("Введите число.", locale))
             return
 
         value = int(raw_value)
@@ -74,11 +144,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         time_type = await_time_input.get("time_type")
 
         if field == "hour" and not (0 <= value <= 23):
-            await update.message.reply_text("Часы должны быть от 0 до 23.")
+            await update.message.reply_text(tr("Часы должны быть от 0 до 23.", locale))
             return
 
         if field == "minute" and not (0 <= value <= 59):
-            await update.message.reply_text("Минуты должны быть от 0 до 59.")
+            await update.message.reply_text(tr("Минуты должны быть от 0 до 59.", locale))
             return
 
         base_time = event.start_time if time_type == "start" else event.stop_time
@@ -121,7 +191,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 reply_markup=reply_markup,
             )
         else:
-            await update.message.reply_text("Готово.", reply_markup=reply_markup)
+            await update.message.reply_text(tr("Готово.", locale), reply_markup=reply_markup)
 
         if update.message:
             try:
@@ -157,6 +227,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             year=year,
             month=month,
             day=day,
+            locale=locale,
             has_participants=has_participants,
             show_details=bool(context.chat_data.get("edit_event_id")),
             show_back_btn=show_back_btn,
@@ -204,7 +275,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 logger.exception("Failed to delete description prompt message")
 
         return
-    await update.message.reply_text("Используйте кнопки для навигации.")
+    await update.message.reply_text(tr("Используйте кнопки для навигации.", locale))
+
+
+async def handle_my_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="tg")
+    user_id = update.effective_user.id if update.effective_user else None
+    if user_id is None and update.message:
+        user_id = update.message.chat_id
+    if user_id is None:
+        await update.message.reply_text(tr("Не удалось определить ваш ID.", locale))
+        return
+    await update.message.reply_text(tr("Ваш ID: {user_id}", locale).format(user_id=user_id))
 
 
 async def all_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -215,13 +297,23 @@ async def all_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def set_commands(app):
-    await app.bot.set_my_commands(
-        [
-            BotCommand("start", "Запустить бота"),
-            BotCommand("team", "Управление участниками"),
-            BotCommand("help", "Help"),
-        ]
-    )
+    commands_ru = [
+        BotCommand("start", "Запустить бота"),
+        BotCommand("my_id", "Показать мой Telegram ID"),
+        BotCommand("team", "Управление участниками"),
+        BotCommand("help", "Помощь"),
+        BotCommand("language", "Сменить язык"),
+    ]
+    commands_en = [
+        BotCommand("start", "Start bot"),
+        BotCommand("my_id", "Show my Telegram ID"),
+        BotCommand("team", "Manage participants"),
+        BotCommand("help", "Help"),
+        BotCommand("language", "Change language"),
+    ]
+    await app.bot.set_my_commands(commands_ru, language_code="ru")
+    await app.bot.set_my_commands(commands_en, language_code="en")
+    await app.bot.set_my_commands(commands_en)
     if SERVICE_ACCOUNTS:
         try:
             for service_account in SERVICE_ACCOUNTS.split(";"):
@@ -236,16 +328,19 @@ async def shutdown(app):
 
 def main() -> None:
     application = ApplicationBuilder().token(TOKEN).post_shutdown(shutdown).build()
+    patch_telegram_bot_i18n(application.bot)
 
     # start, Получение геолокации и Пропуск геолокации
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", handle_help))
+    application.add_handler(CommandHandler("language", handle_language))
     application.add_handler(CommandHandler("team", handle_team_command))
+    application.add_handler(CommandHandler("my_id", handle_my_id))
     application.add_handler(MessageHandler(filters.LOCATION, handle_location))
-    application.add_handler(MessageHandler(filters.Regex("^⏭ Пропустить$"), handle_skip))
+    application.add_handler(MessageHandler(filters.Regex(r"^⏭ (Пропустить|Skip)$"), handle_skip))
 
     # Календарь
-    application.add_handler(MessageHandler(filters.Regex("^📅 Показать календарь$"), show_calendar))
+    application.add_handler(MessageHandler(filters.Regex(r"^📅 (Показать календарь|Show calendar)$"), show_calendar))
     application.add_handler(CallbackQueryHandler(handle_calendar_callback, pattern="^cal_"))
 
     # Создание\удаление события
@@ -258,7 +353,8 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_event_participants_callback, pattern="^create_participant_event_"))
     application.add_handler(CallbackQueryHandler(handle_reschedule_event_callback, pattern="^reschedule_event_"))
     application.add_handler(CallbackQueryHandler(handle_emoji_callback, pattern="^emoji_"))
-    application.add_handler(MessageHandler(filters.Regex("^🗓 Ближайшие события$"), show_upcoming_events))
+    application.add_handler(CallbackQueryHandler(handle_link_callback, pattern="^link_tg_"))
+    application.add_handler(MessageHandler(filters.Regex(r"^🗓 (Ближайшие события|Upcoming events)$"), show_upcoming_events))
 
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))

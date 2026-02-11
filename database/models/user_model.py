@@ -7,7 +7,8 @@ class User(Base):
     __tablename__ = "tg_users"
 
     id = Column(Integer, primary_key=True, index=True)
-    tg_id = Column(BigInteger, index=True, nullable=False, unique=True)
+    tg_id = Column(BigInteger, index=True, nullable=True, unique=True)
+    max_id = Column(BigInteger, index=True, nullable=True, unique=True)
     is_active = Column(Boolean, server_default=true(), comment="Признак, писал ли пользователь боту")
 
     username = Column(String(), nullable=True)

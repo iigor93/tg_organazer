@@ -4,6 +4,7 @@ import enum
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from config import MONTH_NAMES
+from i18n import tr
 
 
 class Recurrent(enum.StrEnum):
@@ -13,21 +14,21 @@ class Recurrent(enum.StrEnum):
     monthly = "monthly"
     annual = "annual"
 
-    def get_name(self) -> str:
+    def get_name(self, locale: str | None = None) -> str:
         if self.value == "never":
-            return "Никогда"
+            return tr("Никогда", locale)
         elif self.value == "daily":
-            return "Ежедневно"
+            return tr("Ежедневно", locale)
         elif self.value == "weekly":
-            return "Еженедельно"
+            return tr("Еженедельно", locale)
         elif self.value == "monthly":
-            return "Ежемесячно"
+            return tr("Ежемесячно", locale)
         else:
-            return "Каждый год"
+            return tr("Каждый год", locale)
 
     @staticmethod
-    def get_all_names() -> list[tuple]:
-        return [(item.get_name(), item.value) for item in Recurrent]
+    def get_all_names(locale: str | None = None) -> list[tuple]:
+        return [(item.get_name(locale), item.value) for item in Recurrent]
 
 
 class Event(BaseModel):
@@ -41,8 +42,10 @@ class Event(BaseModel):
     recurrent: Recurrent = Recurrent.never
     participants: list[int | None] = Field(default_factory=list)
     all_user_participants: dict[int, str] = Field(default_factory=dict)
-    tg_id: int
+    tg_id: int | None = None
     creator_tg_id: int | None = None
+    max_id: int | None = None
+    creator_max_id: int | None = None
 
     def get_date(self) -> tuple[int, int, int]:
         return self.event_date.year, self.event_date.month, self.event_date.day
@@ -65,6 +68,26 @@ class TgUser(BaseModel):
 
     @model_validator(mode="after")
     def names(self) -> "TgUser":
+        if self.title:
+            self.username = self.first_name = self.title
+
+        return self
+
+
+class MaxUser(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    max_id: int = Field(int, alias="id")
+    is_active: bool = True
+    username: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    language_code: str | None = None
+    time_zone: str | None = None
+    title: str | None = None
+
+    @model_validator(mode="after")
+    def names(self) -> "MaxUser":
         if self.title:
             self.username = self.first_name = self.title
 
