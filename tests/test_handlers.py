@@ -187,7 +187,12 @@ async def test_show_notes_returns_markup(db_session_fixture):
 
 @pytest.mark.asyncio
 async def test_note_open_and_delete_callbacks(db_session_fixture):
-    note = await db_controller.create_note(tg_id=1, note_text="Текст заметки")
+    user = TgUser.model_validate(type("U", (), {"id": 1, "first_name": "Alice"})())
+    await db_controller.save_update_user(tg_user=user)
+    user_row_id = await db_controller.get_user_row_id(external_id=1, platform="tg")
+    assert user_row_id is not None
+
+    note = await db_controller.create_note(user_id=user_row_id, note_text="Текст заметки")
     data: dict = {}
     context = type("DummyContext", (), {"user_data": data, "chat_data": data})()
 
@@ -197,20 +202,25 @@ async def test_note_open_and_delete_callbacks(db_session_fixture):
     assert open_update.callback_query.edits
     open_markup = open_update.callback_query.edits[0]["reply_markup"]
     open_buttons = [button.text for row in open_markup.inline_keyboard for button in row]
-    assert "Редактировать" in open_buttons
-    assert "Удалить" in open_buttons
-    assert "Назад" in open_buttons
+    assert "🔄 Редактировать" in open_buttons
+    assert "❌ Удалить" in open_buttons
+    assert "↩️ Назад" in open_buttons
 
     delete_update = make_update_with_callback(data=f"note_delete_{note.id}", user_id=1)
     await handle_note_callback(delete_update, context=context)
 
     assert delete_update.callback_query.edits
-    assert await db_controller.get_note_by_id(note_id=note.id, tg_id=1) is None
+    assert await db_controller.get_note_by_id(note_id=note.id, user_id=user_row_id) is None
 
 
 @pytest.mark.asyncio
 async def test_handle_text_creates_note_when_waiting_state(db_session_fixture):
     from main import handle_text
+
+    user = TgUser.model_validate(type("U", (), {"id": 1, "first_name": "Alice"})())
+    await db_controller.save_update_user(tg_user=user)
+    user_row_id = await db_controller.get_user_row_id(external_id=1, platform="tg")
+    assert user_row_id is not None
 
     data: dict = {"await_note_create": {}}
     context = type("DummyContext", (), {"user_data": data, "chat_data": data})()
@@ -218,5 +228,5 @@ async def test_handle_text_creates_note_when_waiting_state(db_session_fixture):
 
     await handle_text(update, context)
 
-    notes = await db_controller.get_notes(tg_id=1)
+    notes = await db_controller.get_notes(user_id=user_row_id)
     assert any(note.note_text == "Новая заметка" for note in notes)

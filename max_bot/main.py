@@ -58,14 +58,14 @@ load_dotenv(".env")
 
 logger = logging.getLogger(__name__)
 MENU_TEXT = "\u041c\u0435\u043d\u044e"
-MENU_CALENDAR_TEXT = "\u041a\u0430\u043b\u0435\u043d\u0434\u0430\u0440\u044c"
-MENU_UPCOMING_TEXT = "\u0411\u043b\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0441\u043e\u0431\u044b\u0442\u0438\u044f"
+MENU_CALENDAR_TEXT = "📅 Календарь"
+MENU_UPCOMING_TEXT = "🗓 Ближайшие события"
 MENU_NOTES_TEXT = "📝 Заметки"
-MENU_TEAM_TEXT = "\u0423\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u0438"
-MENU_MY_ID_TEXT = "\u041c\u043e\u0439 ID"
-MENU_HELP_TEXT = "\u041f\u043e\u043c\u043e\u0449\u044c"
-MENU_LINK_TG_TEXT = "\u0421\u0432\u044f\u0437\u0430\u0442\u044c \u0441 Telegram"
-MENU_BACK_TEXT = "\u21a9\u041d\u0430\u0437\u0430\u0434"
+MENU_TEAM_TEXT = "👥 Участники"
+MENU_MY_ID_TEXT = "🆔 Мой ID"
+MENU_HELP_TEXT = "❓ Помощь"
+MENU_LINK_TG_TEXT = "🔗 Связать с Telegram"
+MENU_BACK_TEXT = "↩️ Назад"
 MENU_TEXT_ALIASES = {"меню", "menu"}
 MENU_CALENDAR_ALIASES = {"календарь", "calendar", "показать календарь", "show calendar"}
 MENU_UPCOMING_ALIASES = {"ближайшие события", "upcoming events"}

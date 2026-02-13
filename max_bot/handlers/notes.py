@@ -87,14 +87,12 @@ async def _safe_delete_message(context: MaxContext, message_id: int | str | None
         logger.exception("Cannot delete user message after note action")
 
 
-def _resolve_note_owner_id(max_id: int) -> int:
-    # Keep MAX notes isolated from Telegram notes and avoid ID collisions.
-    # Telegram IDs are positive, so MAX note owners are stored as negative IDs.
-    return -int(max_id)
+async def _resolve_note_owner_id(max_id: int) -> int | None:
+    return await db_controller.get_user_row_id(external_id=max_id, platform="max")
 
 
 async def build_notes_list_view(owner_id: int, locale: str | None = None) -> tuple[str, InlineKeyboardMarkup]:
-    notes = await db_controller.get_notes(tg_id=owner_id)
+    notes = await db_controller.get_notes(user_id=owner_id)
     text = tr("Выберите заметку:", locale) if notes else tr("У вас пока нет заметок.", locale)
     return text, _build_notes_markup(notes, locale)
 
@@ -117,7 +115,9 @@ async def show_notes(update: MaxUpdate, context: MaxContext) -> None:
     max_user = MaxUser.model_validate(user)
     db_user = await db_controller.save_update_max_user(max_user=max_user)
     locale = await resolve_user_locale(user.id, platform="max", preferred_language_code=max_user.language_code)
-    owner_id = _resolve_note_owner_id(int(user.id))
+    owner_id = await _resolve_note_owner_id(int(user.id))
+    if owner_id is None:
+        return
     logger.info(f"*** DB user: {db_user}")
 
     text, reply_markup = await build_notes_list_view(owner_id=owner_id, locale=locale)
@@ -141,7 +141,9 @@ async def handle_note_callback(update: MaxUpdate, context: MaxContext) -> None:
     max_user = MaxUser.model_validate(user)
     db_user = await db_controller.save_update_max_user(max_user=max_user)
     locale = await resolve_user_locale(user.id, platform="max", preferred_language_code=max_user.language_code)
-    owner_id = _resolve_note_owner_id(int(user.id))
+    owner_id = await _resolve_note_owner_id(int(user.id))
+    if owner_id is None:
+        return
     logger.info(f"*** DB user: {db_user}")
     data = query.data
 
@@ -166,7 +168,7 @@ async def handle_note_callback(update: MaxUpdate, context: MaxContext) -> None:
         if note_id is None:
             await _show_notes_list_by_query(query, owner_id=owner_id, locale=locale)
             return
-        note = await db_controller.get_note_by_id(note_id=note_id, tg_id=owner_id)
+        note = await db_controller.get_note_by_id(note_id=note_id, user_id=owner_id)
         if not note:
             await _show_notes_list_by_query(query, owner_id=owner_id, locale=locale)
             return
@@ -179,7 +181,7 @@ async def handle_note_callback(update: MaxUpdate, context: MaxContext) -> None:
     if data.startswith("note_delete_"):
         note_id = _parse_note_id(data, "note_delete_")
         if note_id is not None:
-            await db_controller.delete_note(note_id=note_id, tg_id=owner_id)
+            await db_controller.delete_note(note_id=note_id, user_id=owner_id)
         await _show_notes_list_by_query(query, owner_id=owner_id, locale=locale)
         return
 
@@ -188,7 +190,7 @@ async def handle_note_callback(update: MaxUpdate, context: MaxContext) -> None:
         if note_id is None:
             await _show_notes_list_by_query(query, owner_id=owner_id, locale=locale)
             return
-        note = await db_controller.get_note_by_id(note_id=note_id, tg_id=owner_id)
+        note = await db_controller.get_note_by_id(note_id=note_id, user_id=owner_id)
         if not note:
             await _show_notes_list_by_query(query, owner_id=owner_id, locale=locale)
             return
@@ -223,7 +225,9 @@ async def handle_note_text_input(update: MaxUpdate, context: MaxContext, locale:
         return False
 
     locale = locale or await resolve_user_locale(update.effective_chat.id, platform="max")
-    owner_id = _resolve_note_owner_id(int(update.effective_chat.id))
+    owner_id = await _resolve_note_owner_id(int(update.effective_chat.id))
+    if owner_id is None:
+        return True
     note_text = _normalize_note_text(update.message.text)
     if not note_text:
         await update.message.reply_text(tr("Текст заметки не может быть пустым.", locale))
@@ -235,7 +239,7 @@ async def handle_note_text_input(update: MaxUpdate, context: MaxContext, locale:
         return True
 
     if state_create is not None:
-        await db_controller.create_note(tg_id=owner_id, note_text=note_text)
+        await db_controller.create_note(user_id=owner_id, note_text=note_text)
         context.chat_data.pop("await_note_create", None)
 
         text, reply_markup = await build_notes_list_view(owner_id=owner_id, locale=locale)
@@ -259,7 +263,7 @@ async def handle_note_text_input(update: MaxUpdate, context: MaxContext, locale:
         await _safe_delete_message(context, update.message.message_id)
         return True
 
-    note = await db_controller.update_note(note_id=note_id, tg_id=owner_id, note_text=note_text)
+    note = await db_controller.update_note(note_id=note_id, user_id=owner_id, note_text=note_text)
     context.chat_data.pop("await_note_edit", None)
 
     if not note:
