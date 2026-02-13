@@ -493,14 +493,14 @@ msgstr "No text"
 msgid "🗒 Заметка\n\n{note_text}\n\n🕒 Обновлено: {updated_at}"
 msgstr "🗒 Note\n\n{note_text}\n\n🕒 Updated: {updated_at}"
 
-msgid "Редактировать"
-msgstr "Edit"
+msgid "🔄 Редактировать"
+msgstr "🔄 Edit"
 
-msgid "Удалить"
-msgstr "Delete"
+msgid "❌ Удалить"
+msgstr "❌ Delete"
 
-msgid "Назад"
-msgstr "Back"
+msgid "↩️ Назад"
+msgstr "↩️ Back"
 
 msgid "Введите текст новой заметки:"
 msgstr "Enter text for a new note:"

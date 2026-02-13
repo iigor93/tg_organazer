@@ -49,9 +49,9 @@ def _build_note_detail_text(note: DbNote, locale: str | None = None) -> str:
 def _build_note_detail_markup(note_id: int, locale: str | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton(tr("Редактировать", locale), callback_data=f"note_edit_{note_id}")],
-            [InlineKeyboardButton(tr("Удалить", locale), callback_data=f"note_delete_{note_id}")],
-            [InlineKeyboardButton(tr("Назад", locale), callback_data="note_list")],
+            [InlineKeyboardButton(tr("🔄 Редактировать", locale), callback_data=f"note_edit_{note_id}")],
+            [InlineKeyboardButton(tr("❌ Удалить", locale), callback_data=f"note_delete_{note_id}")],
+            [InlineKeyboardButton(tr("↩️ Назад", locale), callback_data="note_list")],
         ]
     )
 
@@ -80,7 +80,7 @@ def _reset_note_states(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def _build_waiting_input_markup(locale: str | None = None, back_callback: str = "note_list") -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[InlineKeyboardButton(tr("Назад", locale), callback_data=back_callback)]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton(tr("↩️ Назад", locale), callback_data=back_callback)]])
 
 
 async def _safe_delete_message(message) -> None:
