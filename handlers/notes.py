@@ -126,8 +126,9 @@ async def handle_note_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             "source_message_id": getattr(query.message, "message_id", None),
             "source_chat_id": getattr(query.message, "chat_id", None),
         }
+        await query.answer(tr("Режим создания заметки активен", locale), show_alert=False)
         await query.edit_message_text(
-            text=tr("Введите текст новой заметки:", locale),
+            text=tr("Режим создания заметки.\nОтправьте текст новым сообщением в чат.", locale),
             reply_markup=_build_waiting_input_markup(locale, back_callback="note_list"),
         )
         return
@@ -171,10 +172,13 @@ async def handle_note_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             "source_message_id": getattr(query.message, "message_id", None),
             "source_chat_id": getattr(query.message, "chat_id", None),
         }
+        await query.answer(tr("Режим редактирования активен", locale), show_alert=False)
+        edit_prompt = tr(
+            "Режим редактирования заметки.\nОтправьте новый текст отдельным сообщением.\n\nТекущий текст:\n{note_text}",
+            locale,
+        ).format(note_text=prompt_note)
         await query.edit_message_text(
-            text=tr("Измените текст заметки и отправьте новое сообщение.\n\nТекущий текст:\n{note_text}", locale).format(
-                note_text=prompt_note
-            ),
+            text=edit_prompt,
             reply_markup=_build_waiting_input_markup(locale, back_callback=f"note_open_{note.id}"),
         )
         return
