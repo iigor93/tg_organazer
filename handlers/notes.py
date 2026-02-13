@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 from database.db_controller import db_controller
 from database.models.note_model import DbNote
 from entities import TgUser
+from handlers.start import show_main_menu_keyboard
 from i18n import format_localized_datetime, resolve_user_locale, tr
 
 logger = logging.getLogger(__name__)
@@ -231,6 +232,7 @@ async def handle_note_text_input(update: Update, context: ContextTypes.DEFAULT_T
             await bot.edit_message_text(chat_id=source_chat_id, message_id=source_message_id, text=text, reply_markup=reply_markup)
         else:
             await update.message.reply_text(text=text, reply_markup=reply_markup)
+        await show_main_menu_keyboard(update.message)
         return True
 
     note_id = state_edit.get("note_id")
@@ -265,4 +267,5 @@ async def handle_note_text_input(update: Update, context: ContextTypes.DEFAULT_T
         await bot.edit_message_text(chat_id=source_chat_id, message_id=source_message_id, text=text, reply_markup=reply_markup)
     else:
         await update.message.reply_text(text=text, reply_markup=reply_markup)
+    await show_main_menu_keyboard(update.message)
     return True
