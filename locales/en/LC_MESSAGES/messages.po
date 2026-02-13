@@ -505,8 +505,17 @@ msgstr "Back"
 msgid "Введите текст новой заметки:"
 msgstr "Enter text for a new note:"
 
-msgid "Измените текст заметки и отправьте новое сообщение.\n\nТекущий текст:\n{note_text}"
-msgstr "Edit the note text and send a new message.\n\nCurrent text:\n{note_text}"
+msgid "Режим создания заметки активен"
+msgstr "Note creation mode is active"
+
+msgid "Режим создания заметки.\nОтправьте текст новым сообщением в чат."
+msgstr "Note creation mode.\nSend the text as a new message in chat."
+
+msgid "Режим редактирования активен"
+msgstr "Edit mode is active"
+
+msgid "Режим редактирования заметки.\nОтправьте новый текст отдельным сообщением.\n\nТекущий текст:\n{note_text}"
+msgstr "Note edit mode.\nSend the new text as a separate message.\n\nCurrent text:\n{note_text}"
 
 msgid "Текст заметки"
 msgstr "Note text"
