@@ -474,3 +474,48 @@ msgstr "Unknown command."
 
 msgid "App started"
 msgstr "App started"
+
+msgid "📝 Заметки"
+msgstr "📝 Notes"
+
+msgid "Выберите заметку:"
+msgstr "Select a note:"
+
+msgid "У вас пока нет заметок."
+msgstr "You do not have notes yet."
+
+msgid "🗒Создать заметку"
+msgstr "🗒Create note"
+
+msgid "Без текста"
+msgstr "No text"
+
+msgid "🗒 Заметка\n\n{note_text}\n\n🕒 Обновлено: {updated_at}"
+msgstr "🗒 Note\n\n{note_text}\n\n🕒 Updated: {updated_at}"
+
+msgid "Редактировать"
+msgstr "Edit"
+
+msgid "Удалить"
+msgstr "Delete"
+
+msgid "Назад"
+msgstr "Back"
+
+msgid "Введите текст новой заметки:"
+msgstr "Enter text for a new note:"
+
+msgid "Измените текст заметки и отправьте новое сообщение.\n\nТекущий текст:\n{note_text}"
+msgstr "Edit the note text and send a new message.\n\nCurrent text:\n{note_text}"
+
+msgid "Текст заметки"
+msgstr "Note text"
+
+msgid "Текст заметки не может быть пустым."
+msgstr "Note text cannot be empty."
+
+msgid "Слишком длинная заметка. Максимум {limit} символов."
+msgstr "Note is too long. Maximum is {limit} characters."
+
+msgid "Заметка не найдена."
+msgstr "Note not found."

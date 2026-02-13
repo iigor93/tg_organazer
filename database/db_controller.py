@@ -3,7 +3,7 @@ from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, delete, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -11,6 +11,7 @@ from sqlalchemy.orm import aliased
 import config
 from config import NEAREST_EVENTS_DAYS
 from database.models.event_models import CanceledEvent, DbEvent, EventParticipant
+from database.models.note_model import DbNote
 from database.models.user_model import User as DB_User
 from database.models.user_model import UserRelation
 from database.session import AsyncSessionLocal
@@ -314,6 +315,48 @@ class DBController:
         return names
 
     @staticmethod
+    async def get_notes(tg_id: int) -> list[DbNote]:
+        async with AsyncSessionLocal() as session:
+            query = select(DbNote).where(DbNote.tg_id == tg_id).order_by(DbNote.updated_at.desc(), DbNote.id.desc())
+            return list((await session.execute(query)).scalars().all())
+
+    @staticmethod
+    async def get_note_by_id(note_id: int, tg_id: int) -> DbNote | None:
+        async with AsyncSessionLocal() as session:
+            query = select(DbNote).where(DbNote.id == int(note_id), DbNote.tg_id == tg_id)
+            return (await session.execute(query)).scalar_one_or_none()
+
+    @staticmethod
+    async def create_note(tg_id: int, note_text: str) -> DbNote:
+        note = DbNote(tg_id=tg_id, note_text=note_text)
+        async with AsyncSessionLocal() as session:
+            session.add(note)
+            await session.commit()
+            await session.refresh(note)
+        return note
+
+    @staticmethod
+    async def update_note(note_id: int, tg_id: int, note_text: str) -> DbNote | None:
+        async with AsyncSessionLocal() as session:
+            query = (
+                update(DbNote)
+                .where(DbNote.id == int(note_id), DbNote.tg_id == tg_id)
+                .values(note_text=note_text, updated_at=func.now())
+                .returning(DbNote)
+            )
+            note = (await session.execute(query)).scalar_one_or_none()
+            await session.commit()
+            return note
+
+    @staticmethod
+    async def delete_note(note_id: int, tg_id: int) -> bool:
+        async with AsyncSessionLocal() as session:
+            query = delete(DbNote).where(DbNote.id == int(note_id), DbNote.tg_id == tg_id)
+            result = await session.execute(query)
+            await session.commit()
+            return bool(result.rowcount)
+
+    @staticmethod
     async def get_participants(tg_id: int, include_inactive: bool = False, platform: str | None = None) -> dict[int, str] | None:
         async with AsyncSessionLocal() as session:
             db_user_alias = aliased(DB_User)
@@ -334,7 +377,11 @@ class DBController:
             return {getattr(item, user_attr): item.first_name for item in participants}
 
     @staticmethod
-    async def get_participants_with_status(tg_id: int, include_inactive: bool = True, platform: str | None = None) -> dict[int, tuple[str, bool]]:
+    async def get_participants_with_status(
+        tg_id: int,
+        include_inactive: bool = True,
+        platform: str | None = None,
+    ) -> dict[int, tuple[str, bool]]:
         async with AsyncSessionLocal() as session:
             db_user_alias = aliased(DB_User)
             user_col = DBController._user_id_column(platform)
@@ -381,7 +428,6 @@ class DBController:
 
         async with AsyncSessionLocal() as session:
             user_col = DBController._user_id_column(platform)
-            user_attr = user_col.key
             current_user = (await session.execute(select(DB_User).where(user_col == current_tg_id))).scalar_one_or_none()
             if not current_user:
                 return 0
