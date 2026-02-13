@@ -7,7 +7,7 @@ from telegram.ext import ContextTypes
 from database.db_controller import db_controller
 from database.models.note_model import DbNote
 from entities import TgUser
-from handlers.start import show_main_menu_keyboard
+from handlers.start import show_main_menu_keyboard_by_chat
 from i18n import format_localized_datetime, resolve_user_locale, tr
 
 logger = logging.getLogger(__name__)
@@ -119,14 +119,14 @@ async def handle_note_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if data == "note_create":
         _reset_note_states(context)
-        message = await query.message.reply_text(tr("Введите текст новой заметки:", locale))
+        message = await context.bot.send_message(chat_id=user.id, text=tr("Введите текст новой заметки:", locale))
         context.chat_data["await_note_create"] = {
             "source_message_id": getattr(query.message, "message_id", None),
             "source_chat_id": getattr(query.message, "chat_id", None),
             "prompt_message_id": getattr(message, "message_id", None),
             "prompt_chat_id": getattr(message, "chat_id", None),
         }
-        await show_main_menu_keyboard(query.message)
+        await show_main_menu_keyboard_by_chat(context, user.id)
         return
 
     if data.startswith("note_open_"):
@@ -163,8 +163,9 @@ async def handle_note_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
         _reset_note_states(context)
         prompt_note = _truncate(note.note_text, PROMPT_PREVIEW_LENGTH)
-        message = await query.message.reply_text(
-            tr("Измените текст заметки и отправьте новое сообщение.\n\nТекущий текст:\n{note_text}", locale).format(
+        message = await context.bot.send_message(
+            chat_id=user.id,
+            text=tr("Измените текст заметки и отправьте новое сообщение.\n\nТекущий текст:\n{note_text}", locale).format(
                 note_text=prompt_note
             ),
         )
@@ -175,7 +176,7 @@ async def handle_note_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             "prompt_message_id": getattr(message, "message_id", None),
             "prompt_chat_id": getattr(message, "chat_id", None),
         }
-        await show_main_menu_keyboard(query.message)
+        await show_main_menu_keyboard_by_chat(context, user.id)
         return
 
     await _show_notes_list_by_query(query, tg_id=user.id, locale=locale)
@@ -212,7 +213,7 @@ async def handle_note_text_input(update: Update, context: ContextTypes.DEFAULT_T
             await bot.edit_message_text(chat_id=source_chat_id, message_id=source_message_id, text=text, reply_markup=reply_markup)
         else:
             await update.message.reply_text(text=text, reply_markup=reply_markup)
-        await show_main_menu_keyboard(update.message)
+        await show_main_menu_keyboard_by_chat(context, update.effective_chat.id)
         return True
 
     note_id = state_edit.get("note_id")
@@ -237,5 +238,5 @@ async def handle_note_text_input(update: Update, context: ContextTypes.DEFAULT_T
         await bot.edit_message_text(chat_id=source_chat_id, message_id=source_message_id, text=text, reply_markup=reply_markup)
     else:
         await update.message.reply_text(text=text, reply_markup=reply_markup)
-    await show_main_menu_keyboard(update.message)
+    await show_main_menu_keyboard_by_chat(context, update.effective_chat.id)
     return True

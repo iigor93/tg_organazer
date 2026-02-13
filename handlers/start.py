@@ -172,6 +172,15 @@ async def show_main_menu_keyboard(message: Message) -> None:
     await message.reply_text(tr("Меню:", locale), reply_markup=reply_markup)
 
 
+async def show_main_menu_keyboard_by_chat(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
+    if not getattr(context, "bot", None):
+        return
+    locale = await resolve_user_locale(chat_id, platform="tg")
+    keyboard = [[tr("📅 Показать календарь", locale)], [tr("🗓 Ближайшие события", locale)], [tr("📝 Заметки", locale)]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, is_persistent=True)
+    await context.bot.send_message(chat_id=chat_id, text=tr("Меню:", locale), reply_markup=reply_markup)
+
+
 async def show_main_menu(message: Message, add_text: str | None = None) -> None:
     logger.info("show_main_menu")
 
