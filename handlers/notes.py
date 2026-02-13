@@ -2,6 +2,7 @@ import logging
 from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from database.db_controller import db_controller
@@ -80,6 +81,13 @@ def _reset_note_states(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 def _build_waiting_input_markup(locale: str | None = None, back_callback: str = "note_list") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton(tr("Назад", locale), callback_data=back_callback)]])
+
+
+async def _safe_delete_message(message) -> None:
+    try:
+        await message.delete()
+    except TelegramError as exc:
+        logger.debug("Cannot delete user message after note edit: %s", exc)
 
 
 async def show_notes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -223,6 +231,7 @@ async def handle_note_text_input(update: Update, context: ContextTypes.DEFAULT_T
     if note_id is None:
         context.chat_data.pop("await_note_edit", None)
         await update.message.reply_text(tr("Заметка не найдена.", locale))
+        await _safe_delete_message(update.message)
         return True
 
     note = await db_controller.update_note(note_id=note_id, tg_id=update.effective_chat.id, note_text=note_text)
@@ -230,6 +239,7 @@ async def handle_note_text_input(update: Update, context: ContextTypes.DEFAULT_T
 
     if not note:
         await update.message.reply_text(tr("Заметка не найдена.", locale))
+        await _safe_delete_message(update.message)
         return True
 
     text = _build_note_detail_text(note, locale)
@@ -241,4 +251,5 @@ async def handle_note_text_input(update: Update, context: ContextTypes.DEFAULT_T
         await bot.edit_message_text(chat_id=source_chat_id, message_id=source_message_id, text=text, reply_markup=reply_markup)
     else:
         await update.message.reply_text(text=text, reply_markup=reply_markup)
+    await _safe_delete_message(update.message)
     return True
