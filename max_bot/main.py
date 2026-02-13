@@ -39,8 +39,10 @@ from max_bot.handlers.events import (
     handle_time_callback,
     show_upcoming_events,
 )
+from max_bot.handlers.notes import handle_note_callback, handle_note_text_input, show_notes
 from max_bot.handlers.start import (
     MAIN_MENU_CALENDAR_TEXT,
+    MAIN_MENU_NOTES_TEXT,
     MAIN_MENU_UPCOMING_TEXT,
     SKIP_LOCATION_TEXT,
     handle_help,
@@ -58,6 +60,7 @@ logger = logging.getLogger(__name__)
 MENU_TEXT = "\u041c\u0435\u043d\u044e"
 MENU_CALENDAR_TEXT = "\u041a\u0430\u043b\u0435\u043d\u0434\u0430\u0440\u044c"
 MENU_UPCOMING_TEXT = "\u0411\u043b\u0438\u0436\u0430\u0439\u0448\u0438\u0435 \u0441\u043e\u0431\u044b\u0442\u0438\u044f"
+MENU_NOTES_TEXT = "📝 Заметки"
 MENU_TEAM_TEXT = "\u0423\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u0438"
 MENU_MY_ID_TEXT = "\u041c\u043e\u0439 ID"
 MENU_HELP_TEXT = "\u041f\u043e\u043c\u043e\u0449\u044c"
@@ -66,6 +69,7 @@ MENU_BACK_TEXT = "\u21a9\u041d\u0430\u0437\u0430\u0434"
 MENU_TEXT_ALIASES = {"меню", "menu"}
 MENU_CALENDAR_ALIASES = {"календарь", "calendar", "показать календарь", "show calendar"}
 MENU_UPCOMING_ALIASES = {"ближайшие события", "upcoming events"}
+MENU_NOTES_ALIASES = {"заметки", "notes"}
 MENU_TEAM_ALIASES = {"участники", "participants"}
 MENU_MY_ID_ALIASES = {"мой id", "my id", "show my id"}
 MENU_HELP_ALIASES = {"помощь", "help"}
@@ -83,6 +87,7 @@ def build_menu_markup() -> InlineKeyboardMarkup:
         [
             [InlineKeyboardButton(MENU_CALENDAR_TEXT, callback_data="menu_calendar")],
             [InlineKeyboardButton(MENU_UPCOMING_TEXT, callback_data="menu_upcoming")],
+            [InlineKeyboardButton(MENU_NOTES_TEXT, callback_data="menu_notes")],
             [InlineKeyboardButton(MENU_TEAM_TEXT, callback_data="menu_team")],
             [InlineKeyboardButton(MENU_MY_ID_TEXT, callback_data="menu_my_id")],
             [InlineKeyboardButton(MENU_LINK_TG_TEXT, callback_data="menu_link_tg")],
@@ -139,6 +144,8 @@ async def _send_tg_link_request(tg_id: int, max_id: int) -> None:
 async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
     logger.info("handle_text")
     locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="max")
+    if await handle_note_text_input(update, context, locale):
+        return
 
     await_time_input = context.chat_data.get("await_time_input")
     if await_time_input:
@@ -319,6 +326,8 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
             await show_calendar(update, context)
         elif data == "menu_upcoming":
             await show_upcoming_events(update, context)
+        elif data == "menu_notes":
+            await show_notes(update, context)
         elif data == "menu_team":
             await handle_team_command(update, context)
         elif data == "menu_my_id":
@@ -351,6 +360,8 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
             await handle_reschedule_event_callback(update, context)
         elif data.startswith("emoji_"):
             await handle_emoji_callback(update, context)
+        elif data.startswith("note_"):
+            await handle_note_callback(update, context)
         else:
             await update.callback_query.answer()
         return
@@ -397,6 +408,8 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
         await show_calendar(update, context)
     elif normalized in MENU_UPCOMING_ALIASES:
         await show_upcoming_events(update, context)
+    elif normalized in MENU_NOTES_ALIASES:
+        await show_notes(update, context)
     elif normalized in MENU_TEAM_ALIASES:
         await handle_team_command(update, context)
     elif normalized in MENU_MY_ID_ALIASES:
@@ -412,6 +425,8 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
         await show_calendar(update, context)
     elif normalized in {MAIN_MENU_UPCOMING_TEXT.lower(), "🗓 upcoming events"}:
         await show_upcoming_events(update, context)
+    elif normalized in {MAIN_MENU_NOTES_TEXT.lower(), "📝 notes"}:
+        await show_notes(update, context)
     elif normalized in SKIP_ALIASES or text == SKIP_LOCATION_TEXT:
         await handle_skip(update, context)
     else:
