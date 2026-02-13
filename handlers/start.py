@@ -168,7 +168,7 @@ async def handle_skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def show_main_menu_keyboard(message: Message) -> None:
     locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="tg")
     keyboard = [[tr("📅 Показать календарь", locale)], [tr("🗓 Ближайшие события", locale)], [tr("📝 Заметки", locale)]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, is_persistent=True)
     await message.reply_text(tr("Меню:", locale), reply_markup=reply_markup)
 
 
@@ -177,7 +177,7 @@ async def show_main_menu(message: Message, add_text: str | None = None) -> None:
 
     locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="tg")
     keyboard = [[tr("📅 Показать календарь", locale)], [tr("🗓 Ближайшие события", locale)], [tr("📝 Заметки", locale)]]
-    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False, is_persistent=True)
     text = f"{add_text}\n\n{tr('Выберите действие:', locale)}" if add_text else tr("Выберите действие:", locale)
 
     await message.reply_text(text=text, reply_markup=reply_markup)
