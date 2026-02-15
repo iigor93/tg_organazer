@@ -16,6 +16,7 @@ SKIP_LOCATION_TEXT = "⏭ Пропустить"
 SHARE_LOCATION_TEXT = "📍 Поделиться геолокацией"
 MAIN_MENU_CALENDAR_TEXT = "📅 Показать календарь"
 MAIN_MENU_UPCOMING_TEXT = "🗓 Ближайшие события"
+MAIN_MENU_NOTES_TEXT = "📝 Заметки"
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,8 @@ async def start(update: MaxUpdate, context: MaxContext) -> None:
     context.chat_data.pop("await_time_input", None)
     context.chat_data.pop("time_input_prompt_message_id", None)
     context.chat_data.pop("time_input_prompt_chat_id", None)
+    context.chat_data.pop("await_note_create", None)
+    context.chat_data.pop("await_note_edit", None)
 
     user = update.effective_chat
     tg_user = MaxUser.model_validate(user)
@@ -68,6 +71,8 @@ async def handle_help(update: MaxUpdate, context: MaxContext) -> None:
     context.chat_data.pop("await_time_input", None)
     context.chat_data.pop("time_input_prompt_message_id", None)
     context.chat_data.pop("time_input_prompt_chat_id", None)
+    context.chat_data.pop("await_note_create", None)
+    context.chat_data.pop("await_note_edit", None)
     text = (
         "👋 Привет! Я помогу планировать дела и напоминать о событиях.\n\n"
         "📌 Основные команды:\n"
@@ -153,7 +158,7 @@ async def handle_skip(update: MaxUpdate, context: MaxContext) -> None:
 
 async def show_main_menu_keyboard(message: MaxMessage) -> None:
     locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="max")
-    keyboard = [[KeyboardButton(MAIN_MENU_CALENDAR_TEXT)], [KeyboardButton(MAIN_MENU_UPCOMING_TEXT)]]
+    keyboard = [[KeyboardButton(MAIN_MENU_CALENDAR_TEXT)], [KeyboardButton(MAIN_MENU_UPCOMING_TEXT)], [KeyboardButton(MAIN_MENU_NOTES_TEXT)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
     await message.reply_text(tr("Меню:", locale), reply_markup=reply_markup)
 
@@ -162,7 +167,7 @@ async def show_main_menu(message: MaxMessage, add_text: str | None = None) -> No
     logger.info("show_main_menu")
 
     locale = await resolve_user_locale(getattr(message, "chat_id", None), platform="max")
-    keyboard = [[KeyboardButton(MAIN_MENU_CALENDAR_TEXT)], [KeyboardButton(MAIN_MENU_UPCOMING_TEXT)]]
+    keyboard = [[KeyboardButton(MAIN_MENU_CALENDAR_TEXT)], [KeyboardButton(MAIN_MENU_UPCOMING_TEXT)], [KeyboardButton(MAIN_MENU_NOTES_TEXT)]]
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
     text = f"{add_text}\n\n{tr('Выберите действие:', locale)}" if add_text else tr("Выберите действие:", locale)
 

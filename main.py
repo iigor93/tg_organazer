@@ -20,9 +20,9 @@ from database.session import engine
 from handlers.cal import handle_calendar_callback, show_calendar
 from handlers.contacts import handle_contact, handle_team_callback, handle_team_command
 from handlers.events import (
+    _get_back_button_state,
     generate_time_selector,
     get_event_constructor,
-    _get_back_button_state,
     handle_create_event_callback,
     handle_delete_event_callback,
     handle_edit_event_callback,
@@ -34,7 +34,8 @@ from handlers.events import (
     show_upcoming_events,
 )
 from handlers.link import handle_link_callback
-from handlers.start import handle_help, handle_language, handle_location, handle_skip, start
+from handlers.notes import handle_note_callback, handle_note_text_input, show_notes
+from handlers.start import handle_help, handle_language, handle_location, handle_skip, show_main_menu_keyboard, start
 from i18n import resolve_user_locale, tr, translate_markup
 
 load_dotenv(".env")
@@ -125,6 +126,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     logger.info("handle_text")
     logger.info(update)
     locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="tg")
+    if await handle_note_text_input(update, context, locale):
+        return
 
     await_time_input = context.chat_data.get("await_time_input")
     if await_time_input:
@@ -194,6 +197,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             await update.message.reply_text(tr("Готово.", locale), reply_markup=reply_markup)
 
         if update.message:
+            await show_main_menu_keyboard(update.message)
             try:
                 await context.bot.delete_message(
                     chat_id=update.message.chat_id,
@@ -257,6 +261,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         context.chat_data.pop("await_event_description", None)
 
         if update.message:
+            await show_main_menu_keyboard(update.message)
             try:
                 await context.bot.delete_message(
                     chat_id=update.message.chat_id,
@@ -354,7 +359,9 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_reschedule_event_callback, pattern="^reschedule_event_"))
     application.add_handler(CallbackQueryHandler(handle_emoji_callback, pattern="^emoji_"))
     application.add_handler(CallbackQueryHandler(handle_link_callback, pattern="^link_tg_"))
+    application.add_handler(CallbackQueryHandler(handle_note_callback, pattern="^note_"))
     application.add_handler(MessageHandler(filters.Regex(r"^🗓 (Ближайшие события|Upcoming events)$"), show_upcoming_events))
+    application.add_handler(MessageHandler(filters.Regex(r"^(📝 )?(Заметки|Notes)$"), show_notes))
 
     application.add_handler(MessageHandler(filters.CONTACT, handle_contact))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
