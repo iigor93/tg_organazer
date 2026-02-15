@@ -11,7 +11,7 @@ import config
 from database.db_controller import db_controller
 from entities import TgUser
 from i18n import format_localized_date, month_year_label, resolve_user_locale, tr, weekday_labels
-from weather import weather_service
+from weather import timezone_to_city, weather_service
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,8 @@ async def generate_calendar(
     city: str | None = None,
 ) -> InlineKeyboardMarkup:
     event_dict = await db_controller.get_current_month_events_by_user(user_id=user_id, month=month, year=year, tz_name=tz_name)
-    weather = await weather_service.get_weather_for_city(user_id=user_id, city=city, platform="tg")
+    city_for_weather = city or timezone_to_city(tz_name)
+    weather = await weather_service.get_weather_for_city(user_id=user_id, city=city_for_weather, platform="tg")
 
     first_weekday, num_days = monthrange(year, month)
 

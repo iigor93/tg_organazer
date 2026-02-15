@@ -9,7 +9,7 @@ from entities import MaxUser
 from i18n import format_localized_date, month_year_label, resolve_user_locale, tr, weekday_labels
 from max_bot.compat import InlineKeyboardButton, InlineKeyboardMarkup
 from max_bot.context import MaxContext, MaxUpdate
-from weather import weather_service
+from weather import timezone_to_city, weather_service
 
 logger = logging.getLogger(__name__)
 EMPTY_DAY_TEXT = "."
@@ -35,7 +35,8 @@ async def generate_calendar(
         tz_name=tz_name,
         platform="max",
     )
-    weather = await weather_service.get_weather_for_city(user_id=user_id, city=city, platform="max")
+    city_for_weather = city or timezone_to_city(tz_name)
+    weather = await weather_service.get_weather_for_city(user_id=user_id, city=city_for_weather, platform="max")
 
     first_weekday, num_days = monthrange(year, month)
 
