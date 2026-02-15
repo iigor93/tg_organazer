@@ -2,14 +2,15 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from max_bot.compat import KeyboardButton, ReplyKeyboardMarkup
-from max_bot.context import MaxContext, MaxMessage, MaxUpdate
 from timezonefinder import TimezoneFinder
 
 from database.db_controller import db_controller
 from entities import MaxUser
 from i18n import normalize_locale, resolve_user_locale, tr
+from max_bot.compat import KeyboardButton, ReplyKeyboardMarkup
+from max_bot.context import MaxContext, MaxMessage, MaxUpdate
 from max_bot.handlers.cal import show_calendar
+from weather import weather_service
 
 SKIP_LOCATION_TEXT = "⏭ Пропустить"
 SHARE_LOCATION_TEXT = "📍 Поделиться геолокацией"
@@ -110,20 +111,33 @@ async def handle_location(update: MaxUpdate, context: MaxContext) -> None:
     if lat is None or lng is None:
         await update.message.reply_text("Could not read location. Please try again.")
         return
+    try:
+        lat_f = float(lat)
+        lng_f = float(lng)
+    except (TypeError, ValueError):
+        await update.message.reply_text("Could not read location. Please try again.")
+        return
 
     tf = TimezoneFinder()
-    tz_name = tf.timezone_at(lat=lat, lng=lng)
+    tz_name = tf.timezone_at(lat=lat_f, lng=lng_f)
     logger.info(f"tz name; {tz_name}")
+    locale_hint = normalize_locale(getattr(update.effective_user, "language_code", None), default="ru")
+    city = await weather_service.resolve_city_from_coords(latitude=lat_f, longitude=lng_f, locale=locale_hint)
+    if city:
+        tg_user.city = city
+        logger.info("Resolved weather city for MAX user %s: %s", user.id, city)
     try:
+        if not tz_name:
+            raise ValueError("Timezone not detected from coordinates")
         now = datetime.now(ZoneInfo(tz_name))
         offset = now.utcoffset()
 
         tg_user.time_zone = tz_name
         await db_controller.save_update_max_user(max_user=tg_user)
         logger.info(f"OFFSET: {offset}, {int(offset.total_seconds()/3600)}, {type(offset)}")
-    except:  # noqa
-        logger.exception("OFFSET ERR: " )
-        pass
+    except Exception:
+        logger.exception("OFFSET ERR: ")
+        await db_controller.save_update_max_user(max_user=tg_user)
 
     await show_calendar(update, context)
 

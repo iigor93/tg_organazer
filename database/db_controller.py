@@ -210,6 +210,7 @@ class DBController:
                     "last_name",
                     "time_shift",
                     "time_zone",
+                    "city",
                     "language_code",
                     "is_active",
                     "is_chat",

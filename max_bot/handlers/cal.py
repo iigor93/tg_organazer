@@ -3,13 +3,13 @@ from calendar import monthrange
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from max_bot.compat import InlineKeyboardButton, InlineKeyboardMarkup
-from max_bot.context import MaxContext, MaxUpdate
-
 import config
 from database.db_controller import db_controller
 from entities import MaxUser
 from i18n import format_localized_date, month_year_label, resolve_user_locale, tr, weekday_labels
+from max_bot.compat import InlineKeyboardButton, InlineKeyboardMarkup
+from max_bot.context import MaxContext, MaxUpdate
+from weather import weather_service
 
 logger = logging.getLogger(__name__)
 EMPTY_DAY_TEXT = "."
@@ -26,14 +26,30 @@ async def generate_calendar(
     month: int,
     tz_name: str = config.DEFAULT_TIMEZONE_NAME,
     locale: str | None = None,
+    city: str | None = None,
 ) -> InlineKeyboardMarkup:
-    event_dict = await db_controller.get_current_month_events_by_user(user_id=user_id, month=month, year=year, tz_name=tz_name, platform="max")
+    event_dict = await db_controller.get_current_month_events_by_user(
+        user_id=user_id,
+        month=month,
+        year=year,
+        tz_name=tz_name,
+        platform="max",
+    )
+    weather = await weather_service.get_weather_for_city(user_id=user_id, city=city, platform="max")
 
     first_weekday, num_days = monthrange(year, month)
 
     header = month_year_label(year=year, month=month, locale=locale)
 
     keyboard = []
+    temperature_text = f"🌡️ {weather.temperature_text}" if weather else "🌡️ --°C"
+    emoji_text = weather.emoji if weather else "❔"
+    keyboard.append(
+        [
+            InlineKeyboardButton(temperature_text, callback_data="cal_ignore"),
+            InlineKeyboardButton(emoji_text, callback_data="cal_ignore"),
+        ]
+    )
 
     prev_month = month - 1 if month > 1 else 12
     prev_year = year if month > 1 else year - 1
@@ -149,6 +165,7 @@ async def show_calendar(update: MaxUpdate, context: MaxContext) -> None:
         user_id=user.id,
         tz_name=db_user.time_zone,
         locale=locale,
+        city=db_user.city,
     )
 
     keyboard = list(reply_markup.inline_keyboard)
@@ -188,7 +205,14 @@ async def build_day_view(
     tz_name: str,
     locale: str | None = None,
 ) -> tuple[str, InlineKeyboardMarkup]:
-    events = await db_controller.get_current_day_events_by_user(user_id=user_id, month=month, year=year, day=day, tz_name=tz_name, platform="max")
+    events = await db_controller.get_current_day_events_by_user(
+        user_id=user_id,
+        month=month,
+        year=year,
+        day=day,
+        tz_name=tz_name,
+        platform="max",
+    )
     events_list = await db_controller.get_current_day_events_by_user(
         user_id=user_id, month=month, year=year, day=day, tz_name=tz_name, deleted=True, platform="max"
     )
@@ -237,7 +261,14 @@ async def handle_calendar_callback(update: MaxUpdate, context: MaxContext) -> No
         month = int(month_str)
 
         # Генерируем новый календарь
-        reply_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone, locale=locale)
+        reply_markup = await generate_calendar(
+            year=year,
+            month=month,
+            user_id=user.id,
+            tz_name=db_user.time_zone,
+            locale=locale,
+            city=db_user.city,
+        )
         keyboard = list(reply_markup.inline_keyboard)
         keyboard.append([InlineKeyboardButton(tr("Меню", locale), callback_data="menu_open")])
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -267,7 +298,14 @@ async def handle_calendar_callback(update: MaxUpdate, context: MaxContext) -> No
         year = int(year_str)
         month = int(month_str)
 
-        reply_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone, locale=locale)
+        reply_markup = await generate_calendar(
+            year=year,
+            month=month,
+            user_id=user.id,
+            tz_name=db_user.time_zone,
+            locale=locale,
+            city=db_user.city,
+        )
         keyboard = list(reply_markup.inline_keyboard)
         keyboard.append([InlineKeyboardButton(tr("Меню", locale), callback_data="menu_open")])
         reply_markup = InlineKeyboardMarkup(keyboard)

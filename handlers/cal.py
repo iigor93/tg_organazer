@@ -11,6 +11,7 @@ import config
 from database.db_controller import db_controller
 from entities import TgUser
 from i18n import format_localized_date, month_year_label, resolve_user_locale, tr, weekday_labels
+from weather import weather_service
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +27,24 @@ async def generate_calendar(
     month: int,
     tz_name: str = config.DEFAULT_TIMEZONE_NAME,
     locale: str | None = None,
+    city: str | None = None,
 ) -> InlineKeyboardMarkup:
     event_dict = await db_controller.get_current_month_events_by_user(user_id=user_id, month=month, year=year, tz_name=tz_name)
+    weather = await weather_service.get_weather_for_city(user_id=user_id, city=city, platform="tg")
 
     first_weekday, num_days = monthrange(year, month)
 
     header = month_year_label(year=year, month=month, locale=locale)
 
     keyboard = []
+    temperature_text = f"🌡️ {weather.temperature_text}" if weather else "🌡️ --°C"
+    emoji_text = weather.emoji if weather else "❔"
+    keyboard.append(
+        [
+            InlineKeyboardButton(temperature_text, callback_data="cal_ignore"),
+            InlineKeyboardButton(emoji_text, callback_data="cal_ignore"),
+        ]
+    )
 
     prev_month = month - 1 if month > 1 else 12
     prev_year = year if month > 1 else year - 1
@@ -143,7 +154,14 @@ async def show_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     tz_name = db_user.time_zone if db_user.time_zone else config.DEFAULT_TIMEZONE_NAME
     today = datetime.now(tz=ZoneInfo(tz_name))
 
-    reply_markup = await generate_calendar(year=today.year, month=today.month, user_id=user.id, tz_name=db_user.time_zone, locale=locale)
+    reply_markup = await generate_calendar(
+        year=today.year,
+        month=today.month,
+        user_id=user.id,
+        tz_name=db_user.time_zone,
+        locale=locale,
+        city=db_user.city,
+    )
 
     keyboard = list(reply_markup.inline_keyboard)
     keyboard.append(
@@ -227,7 +245,14 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
         month = int(month_str)
 
         # Генерируем новый календарь
-        reply_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone, locale=locale)
+        reply_markup = await generate_calendar(
+            year=year,
+            month=month,
+            user_id=user.id,
+            tz_name=db_user.time_zone,
+            locale=locale,
+            city=db_user.city,
+        )
         await query.edit_message_text(tr("📅 Выберите дату события:", locale), reply_markup=reply_markup)
 
     elif data.startswith("cal_week_nav_"):
@@ -251,7 +276,14 @@ async def handle_calendar_callback(update: Update, context: ContextTypes.DEFAULT
         year = int(year_str)
         month = int(month_str)
 
-        reply_markup = await generate_calendar(year=year, month=month, user_id=user.id, tz_name=db_user.time_zone, locale=locale)
+        reply_markup = await generate_calendar(
+            year=year,
+            month=month,
+            user_id=user.id,
+            tz_name=db_user.time_zone,
+            locale=locale,
+            city=db_user.city,
+        )
         await query.edit_message_text(tr("📅 Выберите дату события:", locale), reply_markup=reply_markup)
 
     elif data.startswith("cal_select_"):
