@@ -35,27 +35,11 @@ async def generate_calendar(
         tz_name=tz_name,
         platform="max",
     )
-    city_for_weather = city or timezone_to_city(tz_name)
-    weather = await weather_service.get_weather_for_city(user_id=user_id, city=city_for_weather, platform="max")
-    user_tz = tz_name or config.DEFAULT_TIMEZONE_NAME
-    today_local = datetime.now(tz=ZoneInfo(user_tz))
-    today_text = f"📅 {today_local.day:02d}.{today_local.month:02d}"
-
     first_weekday, num_days = monthrange(year, month)
 
     header = month_year_label(year=year, month=month, locale=locale)
 
     keyboard = []
-    temperature_text = f"🌡️ {weather.temperature_text}" if weather else "🌡️ --°C"
-    emoji_text = weather.emoji if weather else "❔"
-    keyboard.append(
-        [
-            InlineKeyboardButton(temperature_text, callback_data="cal_ignore"),
-            InlineKeyboardButton(emoji_text, callback_data="cal_ignore"),
-            InlineKeyboardButton(today_text, callback_data="cal_ignore"),
-        ]
-    )
-
     prev_month = month - 1 if month > 1 else 12
     prev_year = year if month > 1 else year - 1
     next_month = month + 1 if month < 12 else 1
@@ -91,6 +75,24 @@ async def generate_calendar(
         keyboard.append(week)
 
     return InlineKeyboardMarkup(keyboard)
+
+
+async def build_calendar_message_text(
+    user_id: int,
+    tz_name: str,
+    locale: str | None = None,
+    city: str | None = None,
+) -> str:
+    user_tz = tz_name or config.DEFAULT_TIMEZONE_NAME
+    today_local = datetime.now(tz=ZoneInfo(user_tz))
+    city_for_weather = city or timezone_to_city(user_tz) or "-"
+    weather = await weather_service.get_weather_for_city(user_id=user_id, city=city_for_weather, platform="max")
+    weather_text = f"{weather.temperature_text} {weather.emoji}" if weather else "--°C ❔"
+    today_text = f"{today_local.day:02d}.{today_local.month:02d}.{today_local.year}"
+    return (
+        f'Сегодня - "{today_text}" - в - "{city_for_weather}" - "{weather_text}"\n'
+        f'{tr("Выберите дату события:", locale)}'
+    )
 
 
 async def generate_week_calendar(
@@ -186,7 +188,7 @@ async def show_calendar(update: MaxUpdate, context: MaxContext) -> None:
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     message = update.message or (update.callback_query.message if update.callback_query else None)
-    text = tr("Выберите дату события:", locale)
+    text = await build_calendar_message_text(user_id=user.id, tz_name=tz_name, locale=locale, city=db_user.city)
     if message:
         await message.reply_text(
             text,
@@ -277,7 +279,8 @@ async def handle_calendar_callback(update: MaxUpdate, context: MaxContext) -> No
         keyboard = list(reply_markup.inline_keyboard)
         keyboard.append([InlineKeyboardButton(tr("Меню", locale), callback_data="menu_open")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(tr("Выберите дату события:", locale), reply_markup=reply_markup)
+        text = await build_calendar_message_text(user_id=user.id, tz_name=db_user.time_zone, locale=locale, city=db_user.city)
+        await query.edit_message_text(text, reply_markup=reply_markup)
 
     elif data.startswith("cal_week_nav_"):
         parts = data.split("_")
@@ -296,7 +299,8 @@ async def handle_calendar_callback(update: MaxUpdate, context: MaxContext) -> No
         keyboard = list(reply_markup.inline_keyboard)
         keyboard.append([InlineKeyboardButton(tr("Меню", locale), callback_data="menu_open")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(tr("Выберите дату события:", locale), reply_markup=reply_markup)
+        text = await build_calendar_message_text(user_id=user.id, tz_name=db_user.time_zone, locale=locale, city=db_user.city)
+        await query.edit_message_text(text, reply_markup=reply_markup)
 
     elif data.startswith("cal_month_"):
         _, _, year_str, month_str = data.split("_")
@@ -314,7 +318,8 @@ async def handle_calendar_callback(update: MaxUpdate, context: MaxContext) -> No
         keyboard = list(reply_markup.inline_keyboard)
         keyboard.append([InlineKeyboardButton(tr("Меню", locale), callback_data="menu_open")])
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(tr("Выберите дату события:", locale), reply_markup=reply_markup)
+        text = await build_calendar_message_text(user_id=user.id, tz_name=db_user.time_zone, locale=locale, city=db_user.city)
+        await query.edit_message_text(text, reply_markup=reply_markup)
 
     elif data.startswith("cal_select_"):
         logger.info("Выбор события cal_select_")
