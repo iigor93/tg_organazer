@@ -37,6 +37,9 @@ async def generate_calendar(
     )
     city_for_weather = city or timezone_to_city(tz_name)
     weather = await weather_service.get_weather_for_city(user_id=user_id, city=city_for_weather, platform="max")
+    user_tz = tz_name or config.DEFAULT_TIMEZONE_NAME
+    today_local = datetime.now(tz=ZoneInfo(user_tz))
+    today_text = f"📅 {today_local.day:02d}.{today_local.month:02d}"
 
     first_weekday, num_days = monthrange(year, month)
 
@@ -49,6 +52,7 @@ async def generate_calendar(
         [
             InlineKeyboardButton(temperature_text, callback_data="cal_ignore"),
             InlineKeyboardButton(emoji_text, callback_data="cal_ignore"),
+            InlineKeyboardButton(today_text, callback_data="cal_ignore"),
         ]
     )
 
