@@ -69,6 +69,7 @@ class WeatherService:
     def __init__(self) -> None:
         self._weather_cache: dict[tuple[str, int], _WeatherCacheItem] = {}
         self._geocode_cache: dict[str, tuple[float, float, datetime]] = {}
+        self._city_name_cache: dict[tuple[str, str], tuple[str, datetime]] = {}
         self._lock = asyncio.Lock()
         self._weather_ttl = timedelta(hours=2)
         self._geocode_ttl = timedelta(hours=24)
@@ -264,6 +265,30 @@ class WeatherService:
 
         return weather_data
 
+    async def localize_city_name(self, city: str | None, locale: str | None) -> str | None:
+        if not city:
+            return city
+        normalized_city = city.strip()
+        if not normalized_city or normalized_city in {"-", "—"}:
+            return normalized_city
+
+        language = (locale or "ru")[:2].lower()
+        if not language:
+            language = "ru"
+
+        cache_key = (self._city_key(normalized_city), language)
+        now = datetime.now(timezone.utc)
+        cached = self._city_name_cache.get(cache_key)
+        if cached and now - cached[1] < self._geocode_ttl:
+            return cached[0]
+
+        localized_name = await self._search_city_name(normalized_city, language=language)
+        if not localized_name:
+            return normalized_city
+
+        self._city_name_cache[cache_key] = (localized_name, now)
+        return localized_name
+
     async def _resolve_city_coords(self, city: str) -> tuple[float, float] | None:
         city_key = self._city_key(city)
         now = datetime.now(timezone.utc)
@@ -306,6 +331,27 @@ class WeatherService:
         lon = float(longitude)
         self._geocode_cache[city_key] = (lat, lon, now)
         return lat, lon
+
+    async def _search_city_name(self, city: str, language: str) -> str | None:
+        params = {"name": city, "count": 1, "format": "json", "language": language}
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                response = await client.get(_GEOCODING_SEARCH_URL, params=params)
+                response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError):
+            logger.exception("Failed to resolve localized city name: city=%s language=%s", city, language)
+            return None
+
+        results = payload.get("results") if isinstance(payload, dict) else None
+        if not results:
+            return None
+
+        first = results[0]
+        name = first.get("name") if isinstance(first, dict) else None
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+        return None
 
     async def _fetch_forecast(self, latitude: float, longitude: float) -> tuple[str | None, str]:
         params = {

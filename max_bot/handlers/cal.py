@@ -86,12 +86,13 @@ async def build_calendar_message_text(
     user_tz = tz_name or config.DEFAULT_TIMEZONE_NAME
     today_local = datetime.now(tz=ZoneInfo(user_tz))
     city_for_weather = city or timezone_to_city(user_tz) or "-"
+    city_for_display = await weather_service.localize_city_name(city_for_weather, locale=locale)
     weather = await weather_service.get_weather_for_city(user_id=user_id, city=city_for_weather, platform="max")
     weather_text = f"{weather.temperature_text} {weather.emoji}" if weather else tr("Нет данных ❔", locale)
     today_text = f"{today_local.day:02d}.{today_local.month:02d}.{today_local.year}"
     return (
         f'{tr("Сегодня:", locale)} {today_text}\n'
-        f'{tr("Город:", locale)} {city_for_weather}\n'
+        f'{tr("Город:", locale)} {city_for_display}\n'
         f'{tr("Погода:", locale)} {weather_text}\n\n'
         f'{tr("Выберите дату события:", locale)}'
     )

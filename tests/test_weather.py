@@ -39,3 +39,45 @@ async def test_get_weather_for_city_uses_cache_within_ttl(monkeypatch):
     assert first == second
     assert resolve_calls == 1
     assert fetch_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_localize_city_name_respects_locale_and_cache(monkeypatch):
+    service = WeatherService()
+    calls: list[tuple[str, str]] = []
+
+    async def fake_search_city_name(city: str, language: str):
+        calls.append((city, language))
+        if language == "ru":
+            return "Москва"
+        if language == "en":
+            return "Moscow"
+        return city
+
+    monkeypatch.setattr(service, "_search_city_name", fake_search_city_name)
+
+    ru_first = await service.localize_city_name("Moscow", "ru")
+    ru_second = await service.localize_city_name("Moscow", "ru")
+    en_value = await service.localize_city_name("Moscow", "en")
+
+    assert ru_first == "Москва"
+    assert ru_second == "Москва"
+    assert en_value == "Moscow"
+    assert calls == [("Moscow", "ru"), ("Moscow", "en")]
+
+
+@pytest.mark.asyncio
+async def test_localize_city_name_skips_placeholder(monkeypatch):
+    service = WeatherService()
+    called = False
+
+    async def fake_search_city_name(city: str, language: str):
+        nonlocal called
+        called = True
+        return city
+
+    monkeypatch.setattr(service, "_search_city_name", fake_search_city_name)
+
+    value = await service.localize_city_name("-", "ru")
+    assert value == "-"
+    assert called is False
