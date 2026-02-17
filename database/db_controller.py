@@ -1213,6 +1213,7 @@ class DBController:
 
             new_event = DbEvent(
                 description=event.description,
+                emoji=event.emoji,
                 start_time=new_start_at.time(),
                 start_at=new_start_at,
                 stop_at=new_stop_at,
