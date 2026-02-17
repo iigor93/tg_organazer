@@ -156,6 +156,22 @@ async def test_show_upcoming_events(db_session_fixture):
 
 
 @pytest.mark.asyncio
+async def test_show_upcoming_events_empty_has_create_button(db_session_fixture):
+    update = make_update_with_message(user_id=1)
+    data: dict = {}
+    context = type("DummyContext", (), {"user_data": data, "chat_data": data})()
+
+    await show_upcoming_events(update, context=context)
+
+    assert update.message.replies
+    reply = update.message.replies[0]
+    assert isinstance(reply["reply_markup"], InlineKeyboardMarkup)
+    buttons = [button for row in reply["reply_markup"].inline_keyboard for button in row]
+    assert any(button.text.startswith("✍️ Создать событие на ") for button in buttons)
+    assert any((button.callback_data or "").startswith("create_event_begin_") for button in buttons)
+
+
+@pytest.mark.asyncio
 async def test_team_toggle_with_string_participant_id_marks_selected():
     update = make_update_with_callback(data="team_toggle_2", user_id=1)
     data: dict = {"team_participants": {"2": "Bob"}, "team_selected": []}
