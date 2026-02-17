@@ -70,7 +70,7 @@ class WeatherService:
         self._weather_cache: dict[tuple[str, int], _WeatherCacheItem] = {}
         self._geocode_cache: dict[str, tuple[float, float, datetime]] = {}
         self._lock = asyncio.Lock()
-        self._weather_ttl = timedelta(hours=1)
+        self._weather_ttl = timedelta(hours=2)
         self._geocode_ttl = timedelta(hours=24)
 
     @staticmethod
