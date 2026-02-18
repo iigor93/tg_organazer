@@ -198,7 +198,7 @@ async def test_show_notes_returns_markup(db_session_fixture):
     reply = update.message.replies[0]
     assert isinstance(reply["reply_markup"], InlineKeyboardMarkup)
     button_texts = [button.text for row in reply["reply_markup"].inline_keyboard for button in row]
-    assert "🗒Создать заметку" in button_texts
+    assert "🗒 Создать заметку" in button_texts
 
 
 @pytest.mark.asyncio

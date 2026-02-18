@@ -135,7 +135,7 @@ async def handle_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     contact = update.message.contact
     if contact and not contact.user_id:
-        await update.message.reply_text("Похоже этот номер не зарегистрирован в телеграмм!")
+        await update.message.reply_text("Похоже этот номер не зарегистрирован в Telegram!")
     elif contact:
         user_id = contact.user_id
         if user_id == update.effective_chat.id:

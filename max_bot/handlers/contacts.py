@@ -164,7 +164,7 @@ async def handle_contact(update: MaxUpdate, context: MaxContext) -> None:
         except (TypeError, ValueError):
             logger.info("MAX contact user_id not numeric: %s", contact.user_id)
     if contact and not contact.user_id:
-        await update.message.reply_text(tr("Похоже этот номер не зарегистрирован в телеграмм!", locale))
+        await update.message.reply_text(tr("Похоже этот номер не зарегистрирован в Telegram!", locale))
     elif contact:
         user_id = contact.user_id
         if user_id == update.effective_chat.id:

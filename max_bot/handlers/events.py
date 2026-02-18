@@ -976,7 +976,7 @@ async def handle_delete_event_callback(update: MaxUpdate, context: MaxContext) -
             user_id=user.id, month=month, year=year, day=day, deleted=True, tz_name=db_user.time_zone, platform="max"
         )
         formatted_date = format_localized_date(date(year, month, day), locale=locale, fmt="d MMMM y")
-        text = f"<b>{formatted_date}</b>\n{tr('Выберете события для удаления:', locale)}"
+        text = f"<b>{formatted_date}</b>\n{tr('Выберите события для удаления:', locale)}"
         reply_markup = _build_delete_events_markup(events, selected_ids, year, month, day, locale=locale)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
@@ -1015,7 +1015,7 @@ async def handle_delete_event_callback(update: MaxUpdate, context: MaxContext) -
         )
 
         formatted_date = format_localized_date(date(year, month, day), locale=locale, fmt="d MMMM y")
-        text = f"<b>{formatted_date}</b>\n{tr('Выберете события для удаления:', locale)}"
+        text = f"<b>{formatted_date}</b>\n{tr('Выберите события для удаления:', locale)}"
         reply_markup = _build_delete_events_markup(events, set(), year, month, day, locale=locale)
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
