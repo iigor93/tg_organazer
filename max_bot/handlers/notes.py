@@ -39,7 +39,7 @@ def _build_notes_markup(notes: list[DbNote], locale: str | None = None) -> Inlin
         compact = " ".join(note.note_text.split())
         preview = _truncate(compact, NOTE_PREVIEW_LENGTH)
         rows.append([InlineKeyboardButton(preview or tr("Без текста", locale), callback_data=f"note_open_{note.id}")])
-    rows.append([InlineKeyboardButton(tr("🗒Создать заметку", locale), callback_data="note_create")])
+    rows.append([InlineKeyboardButton(tr("🗒 Создать заметку", locale), callback_data="note_create")])
     return _with_menu_row(rows, locale)
 
 

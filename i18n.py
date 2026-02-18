@@ -71,7 +71,7 @@ def _translate_dynamic(locale: str, text: str) -> str:
         (re.compile(r"^✍️ Создать событие на (?P<date>\d{2}\.\d{2}\.\d{4})$"), "✍️ Create event on {date}"),
         (re.compile(r"^События на <b>(?P<date>.+)</b>:$"), "Events on <b>{date}</b>:"),
         (re.compile(r"^Вы выбрали дату: <b>(?P<date>.+)</b>$"), "You selected: <b>{date}</b>"),
-        (re.compile(r"^<b>(?P<date>.+)</b>\nВыберете события для удаления:$"), "<b>{date}</b>\nSelect events to delete:"),
+        (re.compile(r"^<b>(?P<date>.+)</b>\nВыберите события для удаления:$"), "<b>{date}</b>\nSelect events to delete:"),
         (re.compile(r"^Ваш ID: (?P<user_id>.+)$"), "Your ID: {user_id}"),
         (re.compile(r"^Удалено: (?P<count>\d+)\. Выберите следующих участников\.$"), "Deleted: {count}. Choose the next participants."),
         (re.compile(r"^Удалено: (?P<count>\d+)\. Выберите новых участников\.$"), "Deleted: {count}. Choose new participants."),
