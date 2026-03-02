@@ -4,6 +4,7 @@ import json
 import logging
 import threading
 import os
+import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import TYPE_CHECKING
@@ -80,6 +81,15 @@ _WEBHOOK_LOOP: asyncio.AbstractEventLoop | None = None
 _WEBHOOK_THREAD: threading.Thread | None = None
 _WEBHOOK_QUEUE: asyncio.Queue | None = None
 _WEBHOOK_WORKER_TASK: asyncio.Task | None = None
+
+
+def _normalize_text(text: str | None) -> str:
+    return " ".join((text or "").strip().lower().split())
+
+
+def _normalize_text_no_prefix_symbols(text: str | None) -> str:
+    normalized = _normalize_text(text)
+    return re.sub(r"^[^\w/@#]+", "", normalized).strip()
 
 
 def build_menu_markup() -> InlineKeyboardMarkup:
@@ -385,7 +395,16 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
         return
 
     text = (update.message.text or "").strip()
-    normalized = text.strip().lower()
+    normalized = _normalize_text(text)
+    normalized_no_prefix = _normalize_text_no_prefix_symbols(text)
+    calendar_texts = {MAIN_MENU_CALENDAR_TEXT.lower(), MENU_CALENDAR_TEXT.lower()}
+    upcoming_texts = {MAIN_MENU_UPCOMING_TEXT.lower(), MENU_UPCOMING_TEXT.lower()}
+    notes_texts = {MAIN_MENU_NOTES_TEXT.lower(), MENU_NOTES_TEXT.lower()}
+    team_texts = {MENU_TEAM_TEXT.lower()}
+    my_id_texts = {MENU_MY_ID_TEXT.lower()}
+    help_texts = {MENU_HELP_TEXT.lower()}
+    link_tg_texts = {MENU_LINK_TG_TEXT.lower()}
+
     if text.startswith("/start") or normalized in {"начать", "start"}:
         await start(update, context)
     elif text.startswith("/language"):
@@ -412,28 +431,28 @@ async def dispatch_update(update: MaxUpdate, context: MaxContext) -> None:
         await update.message.reply_text(tr("Ваш ID: {user_id}", locale).format(user_id=update.effective_chat.id))
     elif normalized in MENU_TEXT_ALIASES:
         await update.message.reply_text(tr("Меню:", locale), reply_markup=build_menu_markup())
-    elif normalized in MENU_CALENDAR_ALIASES:
+    elif normalized in MENU_CALENDAR_ALIASES or normalized_no_prefix in MENU_CALENDAR_ALIASES or normalized_no_prefix in calendar_texts:
         await show_calendar(update, context)
-    elif normalized in MENU_UPCOMING_ALIASES:
+    elif normalized in MENU_UPCOMING_ALIASES or normalized_no_prefix in MENU_UPCOMING_ALIASES or normalized_no_prefix in upcoming_texts:
         await show_upcoming_events(update, context)
-    elif normalized in MENU_NOTES_ALIASES:
+    elif normalized in MENU_NOTES_ALIASES or normalized_no_prefix in MENU_NOTES_ALIASES or normalized_no_prefix in notes_texts:
         await show_notes(update, context)
-    elif normalized in MENU_TEAM_ALIASES:
+    elif normalized in MENU_TEAM_ALIASES or normalized_no_prefix in MENU_TEAM_ALIASES or normalized_no_prefix in team_texts:
         await handle_team_command(update, context)
-    elif normalized in MENU_MY_ID_ALIASES:
+    elif normalized in MENU_MY_ID_ALIASES or normalized_no_prefix in MENU_MY_ID_ALIASES or normalized_no_prefix in my_id_texts:
         await update.message.reply_text(tr("Ваш ID: {user_id}", locale).format(user_id=update.effective_chat.id))
-    elif normalized in MENU_LINK_TG_ALIASES:
+    elif normalized in MENU_LINK_TG_ALIASES or normalized_no_prefix in MENU_LINK_TG_ALIASES or normalized_no_prefix in link_tg_texts:
         context.chat_data["await_tg_link"] = True
         await update.message.reply_text(
             tr("Для синхронизации событий с Telegram ботом FamPlanner_bot пришлите свой telegram ID.", locale)
         )
-    elif normalized in MENU_HELP_ALIASES:
+    elif normalized in MENU_HELP_ALIASES or normalized_no_prefix in MENU_HELP_ALIASES or normalized_no_prefix in help_texts:
         await handle_help(update, context)
-    elif normalized in {MAIN_MENU_CALENDAR_TEXT.lower(), "📅 show calendar"}:
+    elif normalized in {"📅 show calendar"} or normalized_no_prefix in {"show calendar"}:
         await show_calendar(update, context)
-    elif normalized in {MAIN_MENU_UPCOMING_TEXT.lower(), "🗓 upcoming events"}:
+    elif normalized in {"🗓 upcoming events"} or normalized_no_prefix in {"upcoming events"}:
         await show_upcoming_events(update, context)
-    elif normalized in {MAIN_MENU_NOTES_TEXT.lower(), "📝 notes"}:
+    elif normalized in {"📝 notes"} or normalized_no_prefix in {"notes"}:
         await show_notes(update, context)
     elif normalized in SKIP_ALIASES or text == SKIP_LOCATION_TEXT:
         await handle_skip(update, context)
