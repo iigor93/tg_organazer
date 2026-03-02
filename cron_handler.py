@@ -109,7 +109,7 @@ async def send_messages(send_now: bool = False):
                     ]
                     reply_markup = MaxInlineKeyboardMarkup(buttons)
                     attachments = reply_markup.to_attachments()
-                await max_api.send_message(text=text, user_id=user_id, attachments=attachments, include_menu=False, locale=locale)
+                await max_api.send_message(text=text, user_id=user_id, attachments=attachments, include_menu=True, locale=locale)
                 await asyncio.sleep(0.001)
 
             await engine.dispose()
