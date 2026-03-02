@@ -1,4 +1,6 @@
 import logging
+import re
+from urllib.parse import urlparse
 
 from max_bot.compat import InlineKeyboardButton, InlineKeyboardMarkup
 from max_bot.context import MaxContext, MaxUpdate
@@ -41,6 +43,50 @@ def _build_team_keyboard(participants: dict[int, str], selected: set[int], local
     buttons.append([InlineKeyboardButton(tr("Закрыть", locale), callback_data="team_close")])
 
     return InlineKeyboardMarkup(buttons)
+
+
+def _extract_max_identifier(raw_value: str) -> tuple[int | None, str | None]:
+    value = (raw_value or "").strip()
+    if not value:
+        return None, None
+
+    if re.fullmatch(r"-?\d+", value):
+        return int(value), None
+
+    if value.startswith("@"):
+        username = value[1:].strip()
+        return None, username or None
+
+    parsed = urlparse(value if "://" in value else f"https://{value}")
+    if parsed.netloc.lower() in {"t.me", "www.t.me", "telegram.me", "www.telegram.me"}:
+        path = parsed.path.strip("/")
+        if not path:
+            return None, None
+        username = path.split("/", 1)[0].strip()
+        if username.startswith("@"):
+            username = username[1:]
+        if not username or username in {"joinchat", "c", "s", "share"}:
+            return None, None
+        return None, username
+
+    return None, None
+
+
+def _display_name(user: MaxUser | None, fallback_id: int | None = None, fallback_username: str | None = None) -> str:
+    if user:
+        if user.first_name:
+            return user.first_name
+        if user.username:
+            username = user.username.lstrip("@")
+            return f"@{username}" if username else user.username
+        if user.max_id is not None:
+            return str(user.max_id)
+    if fallback_username:
+        normalized = fallback_username.lstrip("@")
+        return f"@{normalized}" if normalized else fallback_username
+    if fallback_id is not None:
+        return str(fallback_id)
+    return tr("пользователь")
 
 
 async def handle_team_command(update: MaxUpdate, context: MaxContext) -> None:
@@ -221,3 +267,85 @@ async def handle_contact(update: MaxUpdate, context: MaxContext) -> None:
             )
     else:
         await update.message.reply_text(tr("Не удалось получить данные пользователя, попробуйте еще раз", locale))
+
+
+async def handle_contact_text(update: MaxUpdate, context: MaxContext) -> bool:
+    locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="max")
+    max_id, username = _extract_max_identifier(update.message.text or "")
+    if max_id is None and not username:
+        await update.message.reply_text(
+            tr("Отправьте @username, ссылку t.me/... или числовой ID пользователя.", locale)
+        )
+        return True
+
+    if max_id is not None:
+        if max_id == update.effective_chat.id:
+            await update.message.reply_text(tr("Нельзя добавлять себя", locale))
+            return True
+        new_user = MaxUser(id=max_id)
+        created_user = await db_controller.save_update_max_user(
+            max_user=new_user,
+            from_contact=True,
+            current_user=update.effective_chat.id,
+        )
+    else:
+        found_user = await db_controller.get_user_by_username(username=username, platform="max")
+        if not found_user:
+            await update.message.reply_text(
+                tr("Не удалось найти этого пользователя. Отправьте его числовой ID.", locale)
+            )
+            return True
+        if found_user.max_id == update.effective_chat.id:
+            await update.message.reply_text(tr("Нельзя добавлять себя", locale))
+            return True
+        created_user = await db_controller.save_update_max_user(
+            max_user=found_user,
+            from_contact=True,
+            current_user=update.effective_chat.id,
+        )
+
+    name = _display_name(created_user, fallback_id=max_id, fallback_username=username)
+    if not created_user:
+        text = tr("Пользователь {name} уже добавлен в ваши контакты!", locale).format(name=name)
+    elif created_user.is_active:
+        text = tr("Пользователь {name} добавлен в ваши контакты!", locale).format(name=name)
+    else:
+        text = (
+            tr("Пользователь {name} добавлен в ваши контакты!", locale).format(name=name) + "\n"
+            + tr(
+                "Отправьте ему приглашение в FamPlanner_bot. Вы сможете добавлять его, как участника события, после того как он нажмет START. Перешлите ему следующее сообщение:",
+                locale,
+            )
+        )
+        invite_text = (
+            tr(
+                "Привет!\nДавай вместе создавать события и строить планы!\nЗапусти бота и нажми START.\nВот ссылка: https://t.me/FamPlanner_bot",
+                locale,
+            )
+        )
+
+    await db_controller.get_user(tg_id=update.effective_chat.id, platform="max")
+    await update.message.reply_text(text=text)
+    if "invite_text" in locals():
+        await update.message.reply_text(text=invite_text)
+
+    event = context.chat_data.get("event")
+    if event:
+        participants = _normalize_participants(
+            await db_controller.get_participants(
+                tg_id=update.effective_chat.id,
+                include_inactive=True,
+                platform="max",
+            ) or {}
+        )
+        event.all_user_participants = participants
+        context.chat_data["event"] = event
+
+        reply_markup = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(tr("Продолжить создание события", locale), callback_data="create_event_begin_")]]
+        )
+        await update.message.reply_text(
+            tr("Участник добавлен в контакты. Можно продолжить создание события.", locale),
+            reply_markup=reply_markup,
+        )
+    return True

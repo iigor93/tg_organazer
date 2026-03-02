@@ -449,6 +449,7 @@ async def start_event_creation(
     context.chat_data.pop("await_time_input", None)
     context.chat_data.pop("time_input_prompt_message_id", None)
     context.chat_data.pop("time_input_prompt_chat_id", None)
+    context.chat_data.pop("await_participant_input", None)
     context.chat_data.pop("edit_event_id", None)
     context.chat_data.pop("edit_event_original", None)
     context.chat_data.pop("edit_event_readonly", None)
@@ -505,6 +506,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
     logger.info(f"* EVENT: {event}")
 
     if data.startswith("create_event_begin_"):
+        context.chat_data.pop("await_participant_input", None)
         parts = data.split("_")
         if len(parts) >= 6:
             year, month, day = parts[3], parts[4], parts[5]
@@ -626,6 +628,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text=tr("Как часто повторять событие:", locale), reply_markup=reply_markup)
 
     elif data.startswith("create_event_participants_"):
+        context.chat_data["await_participant_input"] = True
         list_btn = []
         if event.all_user_participants:
             for tg_id, name in event.all_user_participants.items():
@@ -640,7 +643,10 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
 
         reply_markup = InlineKeyboardMarkup(list_btn)
         await query.edit_message_text(
-            text=tr("Добавь пользователя: нажми 📎скрепку ➡️ 👤Контакт ➡️ выбери участника события ➡️ Отправить контакт", locale),
+            text=tr(
+                "Добавь пользователя: отправь @username, ссылку t.me/... или Telegram ID. Можно и через 📎 Контакт.",
+                locale,
+            ),
             reply_markup=reply_markup,
         )
     elif data.startswith("create_event_back_"):
@@ -659,6 +665,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         context.chat_data.pop("await_time_input", None)
         context.chat_data.pop("time_input_prompt_message_id", None)
         context.chat_data.pop("time_input_prompt_chat_id", None)
+        context.chat_data.pop("await_participant_input", None)
         context.chat_data.pop("edit_event_id", None)
         context.chat_data.pop("edit_event_original", None)
         context.chat_data.pop("edit_event_readonly", None)
@@ -676,6 +683,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="HTML")
 
     elif data.startswith("create_event_save_to_db"):
+        context.chat_data.pop("await_participant_input", None)
         edit_event_id = context.chat_data.pop("edit_event_id", None)
         context.chat_data.pop("edit_event_original", None)
         context.chat_data.pop("edit_event_readonly", None)
@@ -695,6 +703,7 @@ async def handle_create_event_callback(update: Update, context: ContextTypes.DEF
         context.chat_data.pop("await_time_input", None)
         context.chat_data.pop("time_input_prompt_message_id", None)
         context.chat_data.pop("time_input_prompt_chat_id", None)
+        context.chat_data.pop("await_participant_input", None)
 
         year, month, day = event.get_date()
         from handlers.cal import build_day_view  # local import to avoid circular dependency

@@ -24,7 +24,7 @@ from max_bot.context import MaxContext, MaxUpdate
 from max_bot.state import chat_state
 from max_bot.update_parser import parse_update
 from max_bot.handlers.cal import handle_calendar_callback, show_calendar
-from max_bot.handlers.contacts import handle_contact, handle_team_callback, handle_team_command
+from max_bot.handlers.contacts import handle_contact, handle_contact_text, handle_team_callback, handle_team_command
 from max_bot.handlers.events import (
     _get_back_button_state,
     generate_time_selector,
@@ -146,6 +146,14 @@ async def handle_text(update: MaxUpdate, context: MaxContext) -> None:
     locale = await resolve_user_locale(getattr(update.effective_chat, "id", None), platform="max")
     if await handle_note_text_input(update, context, locale):
         return
+
+    if context.chat_data.get("await_participant_input"):
+        if not context.chat_data.get("event"):
+            context.chat_data.pop("await_participant_input", None)
+        else:
+            handled = await handle_contact_text(update, context)
+            if handled:
+                return
 
     await_time_input = context.chat_data.get("await_time_input")
     if await_time_input:

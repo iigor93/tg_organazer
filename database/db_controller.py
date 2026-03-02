@@ -38,6 +38,18 @@ class DBController:
     def _participant_id_column(cls, platform: str | None):
         return EventParticipant.participant_user_id
 
+    @staticmethod
+    def _display_name(user: DB_User, external_attr: str) -> str:
+        if user.first_name:
+            return user.first_name
+        if user.username:
+            username = user.username.lstrip("@")
+            return f"@{username}" if username else user.username
+        external_id = getattr(user, external_attr, None)
+        if external_id is not None:
+            return str(external_id)
+        return str(user.id)
+
     @classmethod
     async def _resolve_user_row_id_by_external(
         cls,
@@ -171,6 +183,27 @@ class DBController:
             if not user:
                 return None
 
+            user.id = getattr(user, user_attr)
+            user.time_zone = config.DEFAULT_TIMEZONE_NAME if not user.time_zone else user.time_zone
+            if platform == "max":
+                return MaxUser.model_validate(user)
+            return TgUser.model_validate(user)
+
+    @staticmethod
+    async def get_user_by_username(username: str, platform: str | None = None) -> TgUser | MaxUser | None:
+        normalized = (username or "").strip().lstrip("@").lower()
+        if not normalized:
+            return None
+        user_col = DBController._user_id_column(platform)
+        user_attr = user_col.key
+        async with AsyncSessionLocal() as session:
+            user = (
+                await session.execute(
+                    select(DB_User).where(func.lower(DB_User.username) == normalized, user_col.is_not(None))
+                )
+            ).scalar_one_or_none()
+            if not user:
+                return None
             user.id = getattr(user, user_attr)
             user.time_zone = config.DEFAULT_TIMEZONE_NAME if not user.time_zone else user.time_zone
             if platform == "max":
@@ -441,8 +474,13 @@ class DBController:
             )
 
             participants = (await session.execute(query)).scalars().all()
-
-            return {getattr(item, user_attr): item.first_name for item in participants}
+            prepared: dict[int, str] = {}
+            for item in participants:
+                external_id = getattr(item, user_attr)
+                if external_id is None:
+                    continue
+                prepared[int(external_id)] = DBController._display_name(item, user_attr)
+            return prepared
 
     @staticmethod
     async def get_participants_with_status(
@@ -465,8 +503,13 @@ class DBController:
             )
 
             participants = (await session.execute(query)).scalars().all()
-
-            return {getattr(item, user_attr): (item.first_name, bool(item.is_active)) for item in participants}
+            prepared: dict[int, tuple[str, bool]] = {}
+            for item in participants:
+                external_id = getattr(item, user_attr)
+                if external_id is None:
+                    continue
+                prepared[int(external_id)] = (DBController._display_name(item, user_attr), bool(item.is_active))
+            return prepared
 
     @staticmethod
     async def get_event_participants(event_id: int, platform: str | None = None) -> list[int]:
