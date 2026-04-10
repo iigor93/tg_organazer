@@ -1,3 +1,4 @@
+import os
 import datetime
 import logging
 from typing import Any, Callable
@@ -338,7 +339,8 @@ async def shutdown(app):
 
 
 def main() -> None:
-    application = ApplicationBuilder().token(TOKEN).post_shutdown(shutdown).build()
+    proxy = os.environ["TG_PROXY"]
+    application = ApplicationBuilder().token(TOKEN).proxy(proxy).post_shutdown(shutdown).build()
     patch_telegram_bot_i18n(application.bot)
 
     # start, Получение геолокации и Пропуск геолокации
