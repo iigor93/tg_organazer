@@ -1,0 +1,21 @@
+[Unit]
+Description=FamPlanner Telegram bot
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+User=famplanner
+Group=famplanner
+WorkingDirectory=/home/tg_bot
+EnvironmentFile=/home/tg_bot/.env.low-memory
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/tg_bot/.venv/bin/python /home/tg_bot/main.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+UMask=0077
+MemoryAccounting=true
+MemoryHigh=192M
+
+[Install]
+WantedBy=multi-user.target

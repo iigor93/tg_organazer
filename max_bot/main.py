@@ -15,7 +15,15 @@ if __package__ in {None, ""}:
     # Allow running this file directly without installing the package.
     sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from config import MAX_POLL_TIMEOUT, MAX_WEBHOOK_PORT, TOKEN, WEBHOOK_MAX_SECRET, WEBHOOK_MAX_URL
+from config import (
+    MAX_POLL_TIMEOUT,
+    MAX_WEBHOOK_HOST,
+    MAX_WEBHOOK_PORT,
+    TG_PROXY,
+    TOKEN,
+    WEBHOOK_MAX_SECRET,
+    WEBHOOK_MAX_URL,
+)
 from database.db_controller import db_controller
 from i18n import normalize_locale, resolve_user_locale, tr
 from max_bot.client import build_max_api
@@ -136,7 +144,7 @@ async def _send_tg_link_request(tg_id: int, max_id: int) -> None:
             ]
         },
     }
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, proxy=TG_PROXY) as client:
         response = await client.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", json=payload)
         response.raise_for_status()
 
@@ -622,9 +630,9 @@ class MaxWebhookHandler(BaseHTTPRequestHandler):
 def run_webhook() -> None:
     asyncio.run(_ensure_webhook_subscription())
     _start_webhook_loop()
-    server = ThreadingHTTPServer(("0.0.0.0", MAX_WEBHOOK_PORT), MaxWebhookHandler)
+    server = ThreadingHTTPServer((MAX_WEBHOOK_HOST, MAX_WEBHOOK_PORT), MaxWebhookHandler)
     server.daemon_threads = True
-    logger.info("MAX bot webhook listen=0.0.0.0:%s url=%s", MAX_WEBHOOK_PORT, WEBHOOK_MAX_URL)
+    logger.info("MAX bot webhook listen=%s:%s url=%s", MAX_WEBHOOK_HOST, MAX_WEBHOOK_PORT, WEBHOOK_MAX_URL)
     try:
         server.serve_forever()
     finally:

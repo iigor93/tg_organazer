@@ -1,0 +1,19 @@
+[Unit]
+Description=FamPlanner event reminders and one-hour reminders
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=famplanner
+Group=famplanner
+WorkingDirectory=/home/tg_bot
+EnvironmentFile=/home/tg_bot/.env.low-memory
+# A final override keeps the single reminder process to one DB connection.
+EnvironmentFile=/home/tg_bot/deploy/reminders.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/sh /home/tg_bot/deploy/reminders.sh
+TimeoutStartSec=5min
+UMask=0077
+MemoryAccounting=true
+MemoryHigh=192M

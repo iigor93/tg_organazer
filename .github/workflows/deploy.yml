@@ -15,9 +15,9 @@ jobs:
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
-          password: ${{ secrets.SSH_PASSWORD }}
+          key: ${{ secrets.SSH_KEY }}
+          fingerprint: ${{ secrets.SSH_FINGERPRINT }}
           port: ${{ secrets.SSH_PORT }}
-          script: |
-            cd /home/tg_bot
-            git pull
-            sudo systemctl restart tg_bot
+          command_timeout: 10m
+          # The dedicated key can execute only this root-owned server script.
+          script: /usr/local/sbin/famplanner-deploy

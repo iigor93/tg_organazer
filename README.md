@@ -1,5 +1,7 @@
 # tg-organazer
 
+Production deployment and migration: [small-server operations](docs/server_migration.md).
+
 Telegram bot for personal events and reminders with calendar UI, participants, and recurring events.
 
 Русская версия: `README.ru.md`.
