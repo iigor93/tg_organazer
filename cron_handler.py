@@ -4,19 +4,16 @@ import datetime
 import logging
 
 import telegram
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.request import HTTPXRequest
 
-from config import TOKEN, database_url
+from config import TG_PROXY, TOKEN
 from database.db_controller import db_controller
+from database.session import AsyncSessionLocal, engine
 from i18n import resolve_user_locale, tr
 from max_bot.client import build_max_api
 from max_bot.compat import InlineKeyboardButton as MaxInlineKeyboardButton
 from max_bot.compat import InlineKeyboardMarkup as MaxInlineKeyboardMarkup
-
-engine = create_async_engine(database_url, echo=False)
-AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +29,8 @@ def _build_reminder_text(event: dict, send_now: bool, locale: str | None = None)
     return text
 
 
-async def send_messages(send_now: bool = False):
-    bot = telegram.Bot(token=TOKEN)
+async def send_messages(send_now: bool = False, dry_run: bool = False):
+    bot = telegram.Bot(token=TOKEN, request=HTTPXRequest(proxy=TG_PROXY))
     max_api = await build_max_api()
     try:
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -54,6 +51,10 @@ async def send_messages(send_now: bool = False):
             if not events_tg and not events_max:
                 await engine.dispose()
                 break
+
+            if dry_run:
+                offset += limit
+                continue
 
             for event in events_tg:
                 chat_id = event.get("tg_id")
@@ -116,6 +117,7 @@ async def send_messages(send_now: bool = False):
             offset += limit
     finally:
         await max_api.close()
+        await bot.request.shutdown()
 
 
 if __name__ == "__main__":
@@ -124,9 +126,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Choose datetime")
     parser.add_argument("--now", type=bool, help="send events NOW", default=False)
+    parser.add_argument("--dry-run", action="store_true", help="Query reminder counts without sending messages.")
 
     args = parser.parse_args()
 
     logger.info(f"Args: {args.now}")
 
-    asyncio.run(send_messages(send_now=args.now))
+    asyncio.run(send_messages(send_now=args.now, dry_run=args.dry_run))

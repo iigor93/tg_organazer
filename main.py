@@ -16,7 +16,7 @@ from telegram.ext import (
 )
 
 # ggg
-from config import SERVICE_ACCOUNTS, TOKEN, WEBHOOK_SECRET_TOKEN, WEBHOOK_URL
+from config import SERVICE_ACCOUNTS, TOKEN, WEBHOOK_LISTEN_HOST, WEBHOOK_PORT, WEBHOOK_SECRET_TOKEN, WEBHOOK_URL
 from database.session import engine
 from handlers.cal import handle_calendar_callback, show_calendar
 from handlers.contacts import handle_contact, handle_contact_text, handle_team_callback, handle_team_command
@@ -384,11 +384,12 @@ def main() -> None:
     if WEBHOOK_URL:
         logger.info(f"Через webhook {WEBHOOK_URL}")
         application.run_webhook(
-            listen="0.0.0.0",  # noqa
-            port=8001,
+            listen=WEBHOOK_LISTEN_HOST,
+            port=WEBHOOK_PORT,
             secret_token=WEBHOOK_SECRET_TOKEN,
             webhook_url=WEBHOOK_URL,
             allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=False,
         )
     else:
         logger.info("Через Long polling")

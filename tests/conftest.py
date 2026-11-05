@@ -10,6 +10,16 @@ import database.db_controller as db_controller_module
 import database.session as db_session
 from database.session import Base
 
+_default_engine = db_session.engine
+
+
+@pytest.fixture(scope="session", autouse=True)
+async def close_default_database_engine():
+    yield
+    # Locale helpers can open the module engine outside a patched test session.
+    # Close its aiosqlite worker threads so the pytest process can terminate.
+    await _default_engine.dispose()
+
 
 @pytest.fixture
 async def db_session_fixture(tmp_path, monkeypatch) -> AsyncGenerator[async_sessionmaker[AsyncSession], None]:

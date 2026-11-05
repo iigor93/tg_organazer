@@ -10,6 +10,7 @@ NEAREST_EVENTS_DAYS = 10
 
 
 TOKEN = os.getenv("TG_BOT_TOKEN")
+TG_PROXY = os.getenv("TG_PROXY")
 MAX_BOT_TOKEN = os.getenv("MAX_BOT_TOKEN")
 MAX_API_BASE = os.getenv("MAX_API_BASE", "https://platform-api.max.ru")
 MAX_WEBHOOK_URL = os.getenv("MAX_WEBHOOK_URL")
@@ -17,6 +18,7 @@ MAX_WEBHOOK_SECRET = os.getenv("MAX_WEBHOOK_SECRET")
 WEBHOOK_MAX_URL = os.getenv("WEBHOOK_MAX_URL") or MAX_WEBHOOK_URL
 WEBHOOK_MAX_SECRET = os.getenv("WEBHOOK_MAX_SECRET") or MAX_WEBHOOK_SECRET
 MAX_WEBHOOK_PORT = int(os.getenv("MAX_WEBHOOK_PORT", "8443"))
+MAX_WEBHOOK_HOST = os.getenv("MAX_WEBHOOK_HOST", "0.0.0.0")
 MAX_POLL_TIMEOUT = int(os.getenv("MAX_POLL_TIMEOUT", "30"))
 
 
@@ -39,3 +41,8 @@ SERVICE_ACCOUNTS: str = os.getenv("SERVICE_ACCOUNTS", None)
 
 WEBHOOK_URL: str = os.getenv("WEBHOOK_URL", None)
 WEBHOOK_SECRET_TOKEN: str = os.getenv("WEBHOOK_SECRET_TOKEN", None)
+WEBHOOK_LISTEN_HOST = os.getenv("WEBHOOK_LISTEN_HOST", "0.0.0.0")
+WEBHOOK_PORT = int(os.getenv("WEBHOOK_PORT", "8001"))
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "2"))
+DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "0"))
+DB_POOL_TIMEOUT = float(os.getenv("DB_POOL_TIMEOUT", "15"))

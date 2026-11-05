@@ -1,0 +1,40 @@
+server {
+    listen 80;
+    server_name tgwebhook.ckobah.ru maxhook.ckobah.ru;
+    location /.well-known/acme-challenge/ { root /var/www/letsencrypt; }
+    location / { return 301 https://$host$request_uri; }
+}
+server {
+    listen 443 ssl;
+    server_name tgwebhook.ckobah.ru;
+    ssl_certificate /etc/letsencrypt/live/famplanner/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/famplanner/privkey.pem;
+    client_max_body_size 1m;
+    location /.well-known/acme-challenge/ { root /var/www/letsencrypt; }
+    location / {
+        if (-f /etc/nginx/famplanner-maintenance) { return 503; }
+        proxy_pass http://127.0.0.1:8001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 90s;
+    }
+}
+server {
+    listen 443 ssl;
+    server_name maxhook.ckobah.ru;
+    ssl_certificate /etc/letsencrypt/live/famplanner/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/famplanner/privkey.pem;
+    client_max_body_size 1m;
+    location /.well-known/acme-challenge/ { root /var/www/letsencrypt; }
+    location / {
+        if (-f /etc/nginx/famplanner-maintenance) { return 503; }
+        proxy_pass http://127.0.0.1:8003;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 90s;
+    }
+}
